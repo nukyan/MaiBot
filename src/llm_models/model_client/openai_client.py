@@ -448,6 +448,7 @@ def _sanitize_messages_for_toolless_request(messages: List[Message]) -> List[Mes
                 tool_call_id=message.tool_call_id,
                 tool_name=message.tool_name,
                 tool_calls=None,
+                reasoning_content=None,
             )
             sanitized_messages.append(assistant_message)
             continue
@@ -491,6 +492,8 @@ def _convert_messages(messages: List[Message]) -> List[ChatCompletionMessagePara
             }
             if message.tool_calls:
                 assistant_payload["tool_calls"] = _convert_assistant_tool_calls(message.tool_calls)
+            if message.reasoning_content:
+                cast(Dict[str, Any], assistant_payload)["reasoning_content"] = message.reasoning_content
             converted_messages.append(assistant_payload)
             continue
 
@@ -508,6 +511,28 @@ def _convert_messages(messages: List[Message]) -> List[ChatCompletionMessagePara
         raise ValueError(f"不支持的消息角色：{message.role}")
 
     return converted_messages
+
+
+def _inject_assistant_reasoning_content(
+    messages: List[ChatCompletionMessageParam],
+    *,
+    reasoning_key: str,
+) -> None:
+    """为 OpenAI 兼容 assistant 消息原地补齐思维链字段并按 provider 改名。
+
+    DeepSeek V4 思考模式等要求两个 user 消息之间所有 assistant 消息都带思维链，否则
+    会返回 400；当前消息自身缺失时沿用最近一条 assistant 真实的 ``reasoning_content``，
+    不写空占位符。字段名取自 ``_build_reasoning_key``，与解析侧保持一致。
+    """
+
+    last_reasoning_content: str | None = None
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        message_payload = cast(Dict[str, Any], message)
+        last_reasoning_content = message_payload.pop("reasoning_content", None) or last_reasoning_content
+        if last_reasoning_content:
+            message_payload[reasoning_key] = last_reasoning_content
 
 
 def _convert_tool_options(tool_options: List[ToolOption]) -> List[ChatCompletionToolParam]:
@@ -1198,6 +1223,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 else _sanitize_messages_for_toolless_request(request.message_list)
             )
             messages_payload: List[ChatCompletionMessageParam] = _convert_messages(request_messages)
+            _inject_assistant_reasoning_content(messages_payload, reasoning_key=self.reasoning_key)
             tools_payload: List[ChatCompletionToolParam] | None = (
                 _convert_tool_options(request.tool_options) if request.tool_options else None
             )
