@@ -203,7 +203,7 @@ class MaiMessage(BaseDatabaseDataModel[Messages]):
             message_id=self.message_id,
             time=self.timestamp.timestamp(),
             group_info=receiver_group_info,
-            user_info=sender_user_info,
+            user_info=receiver_user_info,
             additional_config=self.message_info.additional_config,
             sender_info=sender_info,
             receiver_info=receiver_info,
