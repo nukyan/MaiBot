@@ -518,21 +518,24 @@ def _inject_assistant_reasoning_content(
     *,
     reasoning_key: str,
 ) -> None:
-    """为 OpenAI 兼容 assistant 消息原地补齐思维链字段并按 provider 改名。
+    """按 DeepSeek 思考模式协议原地补齐 / 清理 assistant 思维链字段。
 
-    DeepSeek V4 思考模式等要求两个 user 消息之间所有 assistant 消息都带思维链，否则
-    会返回 400；当前消息自身缺失时沿用最近一条 assistant 真实的 ``reasoning_content``，
-    不写空占位符。字段名取自 ``_build_reasoning_key``，与解析侧保持一致。
+    从带工具调用的 assistant 开始，到下一个 user 之前，后续 assistant 必须回传同一段
+    真实思维链；未进入工具调用链时，思维链会被 API 忽略，直接清理掉。
     """
 
-    last_reasoning_content: str | None = None
+    active_reasoning_content: str | None = None
     for message in messages:
-        if message.get("role") != "assistant":
-            continue
-        message_payload = cast(Dict[str, Any], message)
-        last_reasoning_content = message_payload.pop("reasoning_content", None) or last_reasoning_content
-        if last_reasoning_content:
-            message_payload[reasoning_key] = last_reasoning_content
+        role = message.get("role")
+        if role == "user":
+            active_reasoning_content = None
+        elif role == "assistant":
+            payload = cast(Dict[str, Any], message)
+            own_reasoning_content = payload.pop("reasoning_content", None)
+            if payload.get("tool_calls"):
+                active_reasoning_content = own_reasoning_content or active_reasoning_content
+            if active_reasoning_content:
+                payload[reasoning_key] = active_reasoning_content
 
 
 def _convert_tool_options(tool_options: List[ToolOption]) -> List[ChatCompletionToolParam]:
