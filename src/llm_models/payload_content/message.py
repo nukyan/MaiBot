@@ -77,6 +77,8 @@ class Message:
     tool_call_id: str | None = None
     tool_name: str | None = None
     tool_calls: List[ToolCall] | None = None
+    reasoning_content: str | None = None
+    """assistant 思维链内容。DeepSeek V4 等模型在工具调用历史中要求回传该字段。"""
 
     def __post_init__(self) -> None:
         """执行消息对象的基础校验。
@@ -139,6 +141,7 @@ class MessageBuilder:
         self.__tool_call_id: str | None = None
         self.__tool_name: str | None = None
         self.__tool_calls: List[ToolCall] | None = None
+        self.__reasoning_content: str | None = None
 
     def set_role(self, role: RoleType = RoleType.User) -> "MessageBuilder":
         """设置消息角色。
@@ -279,6 +282,17 @@ class MessageBuilder:
         self.__tool_calls = list(tool_calls)
         return self
 
+    def set_reasoning_content(self, reasoning_content: str | None) -> "MessageBuilder":
+        """设置助手消息的思维链内容。空字符串或 ``None`` 视为未设置。
+
+        Raises:
+            ValueError: 当当前角色不是 `assistant` 时抛出。
+        """
+        if self.__role != RoleType.Assistant:
+            raise ValueError("仅当角色为 Assistant 时才能设置 reasoning_content")
+        self.__reasoning_content = reasoning_content or None
+        return self
+
     def build(self) -> Message:
         """构建消息对象。
 
@@ -291,4 +305,5 @@ class MessageBuilder:
             tool_call_id=self.__tool_call_id,
             tool_name=self.__tool_name,
             tool_calls=list(self.__tool_calls) if self.__tool_calls else None,
+            reasoning_content=self.__reasoning_content,
         )

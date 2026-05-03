@@ -16,3 +16,17 @@ def test_prompt_messages_roundtrip_preserves_image_parts() -> None:
     assert len(restored_messages[0].parts) == 2
     assert restored_messages[0].parts[1].image_format == "png"
     assert restored_messages[0].parts[1].image_base64 == "ZmFrZQ=="
+
+
+def test_prompt_messages_roundtrip_preserves_assistant_reasoning_content() -> None:
+    message = (
+        MessageBuilder()
+        .set_role(RoleType.Assistant)
+        .add_text_content("我需要先查询天气。")
+        .set_reasoning_content("用户在问天气，需要调用查询工具。")
+        .build()
+    )
+
+    restored_message = deserialize_prompt_messages(serialize_prompt_messages([message]))[0]
+
+    assert restored_message.reasoning_content == "用户在问天气，需要调用查询工具。"

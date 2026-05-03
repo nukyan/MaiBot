@@ -448,6 +448,7 @@ def _sanitize_messages_for_toolless_request(messages: List[Message]) -> List[Mes
                 tool_call_id=message.tool_call_id,
                 tool_name=message.tool_name,
                 tool_calls=None,
+                reasoning_content=None,
             )
             sanitized_messages.append(assistant_message)
             continue
@@ -491,6 +492,8 @@ def _convert_messages(messages: List[Message]) -> List[ChatCompletionMessagePara
             }
             if message.tool_calls:
                 assistant_payload["tool_calls"] = _convert_assistant_tool_calls(message.tool_calls)
+            if message.reasoning_content:
+                cast(Dict[str, Any], assistant_payload)["reasoning_content"] = message.reasoning_content
             converted_messages.append(assistant_payload)
             continue
 
@@ -508,6 +511,31 @@ def _convert_messages(messages: List[Message]) -> List[ChatCompletionMessagePara
         raise ValueError(f"不支持的消息角色：{message.role}")
 
     return converted_messages
+
+
+def _inject_assistant_reasoning_content(
+    messages: List[ChatCompletionMessageParam],
+    *,
+    reasoning_key: str,
+) -> None:
+    """按 DeepSeek 思考模式协议原地补齐 / 清理 assistant 思维链字段。
+
+    从带工具调用的 assistant 开始，到下一个 user 之前，后续 assistant 必须回传同一段
+    真实思维链；未进入工具调用链时，思维链会被 API 忽略，直接清理掉。
+    """
+
+    active_reasoning_content: str | None = None
+    for message in messages:
+        role = message.get("role")
+        if role == "user":
+            active_reasoning_content = None
+        elif role == "assistant":
+            payload = cast(Dict[str, Any], message)
+            own_reasoning_content = payload.pop("reasoning_content", None)
+            if payload.get("tool_calls"):
+                active_reasoning_content = own_reasoning_content or active_reasoning_content
+            if active_reasoning_content:
+                payload[reasoning_key] = active_reasoning_content
 
 
 def _convert_tool_options(tool_options: List[ToolOption]) -> List[ChatCompletionToolParam]:
@@ -1198,6 +1226,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 else _sanitize_messages_for_toolless_request(request.message_list)
             )
             messages_payload: List[ChatCompletionMessageParam] = _convert_messages(request_messages)
+            _inject_assistant_reasoning_content(messages_payload, reasoning_key=self.reasoning_key)
             tools_payload: List[ChatCompletionToolParam] | None = (
                 _convert_tool_options(request.tool_options) if request.tool_options else None
             )
