@@ -78,9 +78,6 @@ services:
 
   # chat2db占用相对较高但是功能强大
   # 内存占用约600m，内存充足推荐选此
-  # 服务器（纯命令行）环境使用下面的命令
-  # curl -sc cookie.txt -X POST http://localhost:10824/api/oauth/login_a -H "Content-Type: application/json" -d '{"userName":"chat2db","password":"chat2db"}'
-  # curl -sb cookie.txt -X POST http://localhost:10824/api/connection/datasource/create -H "Content-Type: application/json" -d '{"alias": "MaiBot", "url": "jdbc:sqlite:/data/MaiMBot/MaiBot.db", "password": "", "type": "SQLITE"}'
   chat2db:
     image: chat2db/chat2db:latest
     container_name: maim-bot-chat2db
@@ -89,7 +86,7 @@ services:
       - "10824:10824"
     volumes:
       - ./data/MaiMBot:/data/MaiMBot
-      - ./data/chat2db:/root/.chat2db
+      - ./data/chat2db:/root/.chat2db/db
     networks:
       - maim_bot
   
