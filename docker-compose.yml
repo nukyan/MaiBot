@@ -86,6 +86,7 @@ services:
       - "10824:10824"
     volumes:
       - ./data/MaiMBot:/data/MaiMBot
+      - ./data/chat2db:/root/.chat2db
     networks:
       - maim_bot
   
