@@ -1346,6 +1346,7 @@ class MaisakaReasoningEngine:
                 timestamp=response.raw_message.timestamp,
                 tool_calls=[tool_call],
                 source_kind="timing_gate",
+                reasoning_content=response.raw_message.reasoning_content,
             )
         )
         if tool_call.func_name == "wait":
