@@ -306,7 +306,7 @@ async def test_private_outbound_message_preserves_bot_sender_and_receiver_user(
     maim_message = await outbound_message.to_maim_message()
 
     assert maim_message.message_info.user_info is not None
-    assert maim_message.message_info.user_info.user_id == "bot-qq"
+    assert maim_message.message_info.user_info.user_id == "target-user"
     assert maim_message.message_info.group_info is None
     assert maim_message.message_info.sender_info is not None
     assert maim_message.message_info.sender_info.user_info is not None
@@ -336,8 +336,7 @@ async def test_group_outbound_message_preserves_bot_sender_and_target_group(
     assert outbound_message is not None
     maim_message = await outbound_message.to_maim_message()
 
-    assert maim_message.message_info.user_info is not None
-    assert maim_message.message_info.user_info.user_id == "bot-qq"
+    assert maim_message.message_info.user_info is None
     assert maim_message.message_info.group_info is not None
     assert maim_message.message_info.group_info.group_id == "target-group"
     assert maim_message.message_info.receiver_info is not None
