@@ -102,7 +102,7 @@ services:
     container_name: ds2api
     restart: always
     volumes:
-      - ./docker-config/ds2api:/data
+      - ./docker-config/ds2api/config.json:/data/config.json
     environment:
       - TZ=Asia/Shanghai
       - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
