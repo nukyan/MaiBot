@@ -25,7 +25,7 @@ services:
       - ./data/MaiMBot/emoji:/data/emoji # 持久化表情包
       - ./data/MaiMBot/plugins:/MaiMBot/plugins # 插件目录
       - ./data/MaiMBot/logs:/MaiMBot/logs # 日志目录
-      - ./depends-data:/MaiMBot/depends-data:ro # 运行时资源文件
+      - ./data/MaiMBot/depends-data:/MaiMBot/depends-data # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
     restart: always
     networks:
@@ -96,7 +96,20 @@ services:
       - ./data/chat2db:/root/.chat2db/db
     networks:
       - maim_bot
-  
+
+  ds2api:
+    image: ghcr.io/cjackhwang/ds2api:latest
+    container_name: ds2api
+    restart: always
+    volumes:
+      - ./docker-config/ds2api:/data
+    environment:
+      - TZ=Asia/Shanghai
+      - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
+      - DS2API_CONFIG_PATH=/data/config.json
+    networks:
+      - maim_bot
+
 # volumes:         #  若需要持久化Python包时启用
 #   site-packages:
 #   caddy_data:
