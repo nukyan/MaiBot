@@ -15,7 +15,7 @@ services:
 #      - EULA_AGREE=1b662741904d7155d1ce1c00b3530d0d # 同意EULA
 #      - PRIVACY_AGREE=9943b855e72199d0f5016ea39052f1b6 # 同意EULA
     ports:
-      - "18001:8001" # webui端口
+#      - "18001:8001" # webui端口
 #      - "8000:8000"
     volumes:
       # 监听地址和端口已迁移到 ./docker-config/mmc/bot_config.toml 的 maim_message 与 webui 配置段
@@ -31,23 +31,6 @@ services:
     networks:
       - maim_bot
 
-  # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
-  # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
-  # caddy:
-  #   image: caddy:2
-  #   container_name: maibot-caddy
-  #   restart: always
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./dashboard/docs/Caddyfile.docker.example:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - core
-  #   networks:
-  #     - maim_bot
   napcat:
     environment:
       - NAPCAT_UID=1000
@@ -62,6 +45,27 @@ services:
     container_name: maim-bot-napcat
     restart: always
     image: mlikiowa/napcat-docker:latest
+    networks:
+      - maim_bot
+
+  # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
+  # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
+  caddy:
+    profiles:
+      - caddy
+    image: caddy:2-alpine
+    container_name: maim-bot-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./docker-config/caddy:/config
+    depends_on:
+      - core
     networks:
       - maim_bot
 
@@ -188,10 +192,6 @@ services:
     networks:
       - maim_bot
 
-# volumes:         #  若需要持久化Python包时启用
-#   site-packages:
-#   caddy_data:
-#   caddy_config:
 networks:
   maim_bot:
     driver: bridge
