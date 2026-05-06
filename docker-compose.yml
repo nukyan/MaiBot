@@ -8,7 +8,7 @@ services:
     # image: sengokucola/maibot:dev
     # image: infinitycat/maibot:dev
     environment:
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
       - EULA_AGREE=1b662741904d7155d1ce1c00b3530d0d
       - PRIVACY_AGREE=9943b855e72199d0f5016ea39052f1b6
       - MAIBOT_LEGACY_0X_UPGRADE_CONFIRMED=1 # Docker 无法交互确认旧版升级迁移，默认跳过确认提示
@@ -27,7 +27,7 @@ services:
       - ./data/MaiMBot/logs:/MaiMBot/logs # 日志目录
       - ./data/MaiMBot/depends-data:/MaiMBot/depends-data # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
-    restart: always
+    restart: unless-stopped
     networks:
       - maim_bot
 
@@ -52,7 +52,7 @@ services:
     environment:
       - NAPCAT_UID=1000
       - NAPCAT_GID=1000
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "6099:6099"
     volumes:
@@ -71,7 +71,7 @@ services:
     # 注意：coleifer/sqlite-web 镜像不支持arm64
     image: coleifer/sqlite-web
     container_name: sqlite-web
-    restart: always
+    restart: unless-stopped
     ports:
       - "8120:8080"
     volumes:
@@ -88,7 +88,7 @@ services:
       - chat2db
     image: chat2db/chat2db:latest
     container_name: maim-bot-chat2db
-    restart: always
+    restart: unless-stopped
     ports:
       - "10824:10824"
     volumes:
@@ -97,16 +97,94 @@ services:
     networks:
       - maim_bot
 
+  # https://github.com/CJackHwang/ds2api/blob/aa29084/docker-compose.yml
   ds2api:
+    profiles:
+      - ds2api
     image: ghcr.io/cjackhwang/ds2api:latest
     container_name: ds2api
-    restart: always
+    restart: unless-stopped
+    ports:
+      - "6011:5001"
     volumes:
       - ./docker-config/ds2api/config.json:/data/config.json
     environment:
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
       - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
       - DS2API_CONFIG_PATH=/data/config.json
+    networks:
+      - maim_bot
+
+  # https://github.com/Wei-Shaw/sub2api/blob/a1106e8/deploy/docker-compose.local.yml
+  sub2api:
+    profiles:
+      - sub2api
+    image: weishaw/sub2api:latest
+    container_name: sub2api
+    restart: unless-stopped
+    ports:
+      - "6012:8080"
+    volumes:
+      - ./data/sub2api:/app/data
+      - ./docker-config/sub2api/config.yaml:/app/data/config.yaml
+    environment:
+      - AUTO_SETUP=true
+      - DATABASE_HOST=postgres
+      - DATABASE_DBNAME=${POSTGRES_DB:-sub2api}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-sub2api}
+      - DATABASE_USER=${POSTGRES_USER:-sub2api}
+      - REDIS_HOST=valkey
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
+      - ANTIGRAVITY_OAUTH_CLIENT_SECRET=${ANTIGRAVITY_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_CLI_OAUTH_CLIENT_SECRET=${GEMINI_CLI_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_OAUTH_CLIENT_ID=${GEMINI_OAUTH_CLIENT_ID:-}
+      - GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}
+      - GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
+      - SECURITY_URL_ALLOWLIST_ENABLED=false
+      - TZ=${TZ:-Asia/Shanghai}
+    networks:
+      - maim_bot
+
+  postgres:
+    profiles:
+      - sub2api
+    image: postgres:18-alpine
+    container_name: sub2api-postgres
+    restart: unless-stopped
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sub2api}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sub2api}
+      - POSTGRES_DB=${POSTGRES_DB:-sub2api}
+      - PGDATA=/var/lib/postgresql/data
+      - TZ=${TZ:-Asia/Shanghai}
+    networks:
+      - maim_bot
+
+  valkey:
+    profiles:
+      - sub2api
+    image: valkey/valkey:8-alpine
+    container_name: sub2api-valkey
+    restart: unless-stopped
+    volumes:
+      - ./data/redis_data:/data
+    command: >
+        valkey-server
+          --save 60 1
+          --appendonly yes
+          --appendfsync everysec
+          ${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
     networks:
       - maim_bot
 
