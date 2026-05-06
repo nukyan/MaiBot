@@ -34,6 +34,7 @@ from .models import (
     build_resource_template_spec,
     build_tool_annotation,
     build_tool_icon,
+    _dump_model_metadata,
 )
 
 if TYPE_CHECKING:
@@ -309,7 +310,7 @@ class MCPManager:
                         provider_type="mcp",
                         icons=[build_tool_icon(item) for item in getattr(tool, "icons", []) or []],
                         annotation=build_tool_annotation(getattr(tool, "annotations", None)),
-                        metadata={"server_name": server_name} | (getattr(tool, "meta", None) or {}),
+                        metadata={"server_name": server_name} | _dump_model_metadata(tool)),
                     )
                 )
         return tool_specs
