@@ -73,7 +73,7 @@ services:
     profiles:
       - sqlite-web
     # 注意：coleifer/sqlite-web 镜像不支持arm64
-    image: coleifer/sqlite-web
+    image: coleifer/sqlite-web:latest
     container_name: sqlite-web
     restart: unless-stopped
     ports:
@@ -130,9 +130,13 @@ services:
       - "6012:8080"
     volumes:
       - ./data/sub2api:/app/data
-      - ./docker-config/sub2api/config.yaml:/app/data/config.yaml
+      - ./docker-config/sub2api:/app/config
+    depends_on:
+      - postgres
+      - valkey
     environment:
       - AUTO_SETUP=true
+      - DATA_DIR=/app/config
       - DATABASE_HOST=postgres
       - DATABASE_DBNAME=${POSTGRES_DB:-sub2api}
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-sub2api}
@@ -149,8 +153,9 @@ services:
       - GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}
       - GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}
       - GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}
-      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
       - SECURITY_URL_ALLOWLIST_ENABLED=false
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
+      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=true
       - TZ=${TZ:-Asia/Shanghai}
     networks:
       - maim_bot
@@ -180,15 +185,14 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/redis_data:/data
-    command: >
-        valkey-server
-          --save 60 1
-          --appendonly yes
-          --appendfsync everysec
-          ${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}
     environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
+      TZ: ${TZ:-Asia/Shanghai}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-}
+      VALKEY_EXTRA_FLAGS: >-
+        --save 60 1
+        --appendonly yes
+        --appendfsync everysec
+        ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}
     networks:
       - maim_bot
 
