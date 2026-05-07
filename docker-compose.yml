@@ -43,7 +43,6 @@ services:
       - ./data/qq:/app/.config/QQ # 持久化QQ本体
       - ./data/MaiMBot:/MaiMBot/data # 共享目录
     container_name: maim-bot-napcat
-    host: maim-bot
     mac_address: 02:42:ac:11:45:14
     restart: unless-stopped
     image: mlikiowa/napcat-docker:latest
