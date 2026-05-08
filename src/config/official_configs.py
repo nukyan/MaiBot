@@ -1420,6 +1420,59 @@ class AMemorixSparseRetrievalConfig(ConfigBase):
     """关系候选数"""
 
 
+class AMemorixRelationVectorizationConfig(ConfigBase):
+    """A_Memorix 关系向量化配置"""
+
+    enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用关系向量",
+                "en_US": "Enable relation vectors",
+                "ja_JP": "関係ベクトルを有効化",
+            },
+        },
+    )
+    """是否为关系边写入并启用向量化召回"""
+
+    backfill_enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用后台回填",
+                "en_US": "Enable backfill loop",
+                "ja_JP": "バックフィルループを有効化",
+            },
+        },
+    )
+    """启用后是否运行后台关系向量回填任务"""
+
+    write_on_import: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "导入时写入向量",
+                "en_US": "Write vectors on import",
+                "ja_JP": "インポート時にベクトルを書き込み",
+            },
+        },
+    )
+    """导入流程是否同步写入关系向量"""
+
+    max_retry: int = Field(
+        default=3,
+        ge=0,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "最大重试",
+                "en_US": "Max retries",
+                "ja_JP": "最大リトライ回数",
+            },
+        },
+    )
+    """关系向量回填的单条最大重试次数"""
+
+
 class AMemorixRetrievalConfig(ConfigBase):
     """A_Memorix 检索配置"""
 
@@ -1551,6 +1604,18 @@ class AMemorixRetrievalConfig(ConfigBase):
         },
     )
     """稀疏检索配置"""
+
+    relation_vectorization: AMemorixRelationVectorizationConfig = Field(
+        default_factory=AMemorixRelationVectorizationConfig,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "关系向量化",
+                "en_US": "Relation vectorization",
+                "ja_JP": "関係ベクトル化",
+            },
+        },
+    )
+    """关系向量化配置"""
 
 
 class AMemorixThresholdConfig(ConfigBase):
