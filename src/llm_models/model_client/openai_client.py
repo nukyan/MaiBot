@@ -1124,9 +1124,8 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             return
         cache = self._reasoning_cache
         for tool_call in api_response.tool_calls:
-            if call_id := (tool_call.call_id or "").strip():
-                cache[call_id] = reasoning_content
-                cache.move_to_end(call_id)
+            cache[tool_call.call_id] = reasoning_content
+            cache.move_to_end(tool_call.call_id)
         while len(cache) > self._REASONING_CACHE_MAX_SIZE:
             cache.popitem(last=False)
 
@@ -1148,7 +1147,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             if payload.get("reasoning_content"):
                 continue
             for tool_call in payload.get("tool_calls") or ():
-                if isinstance(tool_call, dict) and (cached := cache.get(tool_call.get("id"))):
+                if cached := cache.get(tool_call.get("id")):
                     payload["reasoning_content"] = cached
                     break
 
