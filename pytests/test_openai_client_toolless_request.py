@@ -197,7 +197,7 @@ def test_openai_client_caches_and_hydrates_reasoning_content_by_tool_call_id() -
     api_response.tool_calls = [ToolCall(call_id="call_xyz", func_name="reply", args={})]
     client._remember_assistant_reasoning_content(api_response)
 
-    assert client._reasoning_content_by_tool_call_id["call_xyz"] == "上一轮思维链"
+    assert client._reasoning_cache["call_xyz"] == "上一轮思维链"
 
     # 下一轮请求历史里没带 reasoning_content，hydrate 应按 id 自动补回
     converted_messages = [

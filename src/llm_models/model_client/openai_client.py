@@ -1114,10 +1114,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             default_headers=client_config.default_headers or None,
             default_query=client_config.default_query or None,
         )
-        # DeepSeek 思考模式要求带工具调用的 assistant 在后续轮次必须回传 reasoning_content。
-        # 客户端按 ``tool_call_id`` 把响应中的思维链记入 LRU；下一轮请求构造时若历史里出现
-        # 同 id 的 assistant tool_call 会自动补回，上层无需感知 ``reasoning_content`` 的存在。
-        self._reasoning_content_by_tool_call_id: "OrderedDict[str, str]" = OrderedDict()
+        self._reasoning_cache = OrderedDict()
 
     def _remember_assistant_reasoning_content(self, api_response: APIResponse) -> None:
         """把响应中带工具调用的 ``reasoning_content`` 按 ``tool_call_id`` 写入 LRU 缓存。"""
@@ -1125,7 +1122,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
         reasoning_content = api_response.reasoning_content
         if not reasoning_content or not api_response.tool_calls:
             return
-        cache = self._reasoning_content_by_tool_call_id
+        cache = self._reasoning_cache
         for tool_call in api_response.tool_calls:
             if call_id := (tool_call.call_id or "").strip():
                 cache[call_id] = reasoning_content
@@ -1141,7 +1138,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
         ``tool_call_id`` 自动从缓存补回，让 ``_inject_assistant_reasoning_content`` 接管后续
         carry-forward 与 provider 字段名转换。"""
 
-        cache = self._reasoning_content_by_tool_call_id
+        cache = self._reasoning_cache
         if not cache:
             return
         for message in messages:
