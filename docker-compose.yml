@@ -8,7 +8,7 @@ services:
     # image: sengokucola/maibot:dev
     # image: infinitycat/maibot:dev
     environment:
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
       - EULA_AGREE=1b662741904d7155d1ce1c00b3530d0d
       - PRIVACY_AGREE=9943b855e72199d0f5016ea39052f1b6
       - MAIBOT_LEGACY_0X_UPGRADE_CONFIRMED=1 # Docker 无法交互确认旧版升级迁移，默认跳过确认提示
@@ -20,59 +20,101 @@ services:
 #      - "8000:8000"
     volumes:
       # 监听地址和端口已迁移到 ./docker-config/mmc/bot_config.toml 的 maim_message 与 webui 配置段
-      - ./docker-config/mmc:/MaiMBot/config # 持久化bot配置文件
-      - ./data/MaiMBot:/MaiMBot/data # 共享目录
-      - ./data/MaiMBot/emoji:/data/emoji # 持久化表情包
-      - ./data/MaiMBot/plugins:/MaiMBot/plugins # 插件目录
-      - ./data/MaiMBot/logs:/MaiMBot/logs # 日志目录
-      - ./depends-data:/MaiMBot/depends-data # 运行时资源文件
+      - ./docker-config/mmc:/MaiMBot/config:Z # 持久化bot配置文件
+      - ./data/MaiMBot:/MaiMBot/data:z # 共享目录
+      - ./data/MaiMBot/emoji:/data/emoji:Z # 持久化表情包
+      - ./data/MaiMBot/plugins:/MaiMBot/plugins:Z # 插件目录
+      - ./data/MaiMBot/logs:/MaiMBot/logs:Z # 日志目录
+      - ./data/MaiMBot/depends-data:/MaiMBot/depends-data:Z # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
-    restart: always
+    entrypoint: uv run --no-sync bot.py
+    restart: unless-stopped
+    networks:
+      - maim_bot
+
+  napcat:
+    profiles:
+      - napcat
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+    ports:
+      - "6099:6099"
+    volumes:
+      - ./docker-config/napcat:/app/napcat/config:Z # 持久化napcat配置文件
+      - ./data/qq:/app/.config/QQ:Z # 持久化QQ本体
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - apparmor=unconfined
+      - label=type:unconfined_t
+    container_name: maim-bot-napcat
+    hostname: <HOSTNAME>
+    mac_address: <MAC_ADDR>
+    restart: unless-stopped
+    image: mlikiowa/napcat-docker:latest
+    networks:
+      - maim_bot
+
+  snowluma:
+    profiles:
+      - snowluma
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - SNOWLUMA_HOOK_AUTOLOAD=true
+    ports:
+      - "5099:5099"
+      - "5900:5900"
+      - "6081:6081"
+    volumes:
+      - ./docker-config/snowluma:/app/snowluma-data:Z
+      - ./docker-config/qq:/app/.config:Z
+      - ./data/qq:/app/.local/share:Z
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
+      - label=type:unconfined_t
+    container_name: maim-bot-snowluma
+    hostname: <HOSTNAME>
+    mac_address: <MAC_ADDR>
+    restart: unless-stopped
+    image: motricseven7/snowluma:latest
     networks:
       - maim_bot
 
   # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
   # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
-  # caddy:
-  #   image: caddy:2
-  #   container_name: maibot-caddy
-  #   restart: always
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./dashboard/docs/Caddyfile.docker.example:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - core
-  #   networks:
-  #     - maim_bot
-  napcat:
-    environment:
-      - NAPCAT_UID=1000
-      - NAPCAT_GID=1000
-      - TZ=Asia/Shanghai
+  caddy:
+    profiles:
+      - caddy
+    image: caddy:2-alpine
+    container_name: maim-bot-caddy
+    restart: unless-stopped
     ports:
-      - "6099:6099"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
-      - ./docker-config/napcat:/app/napcat/config # 持久化napcat配置文件
-      - ./data/qq:/app/.config/QQ # 持久化QQ本体
-      - ./data/MaiMBot:/MaiMBot/data # 共享目录
-    container_name: maim-bot-napcat
-    restart: always
-    image: mlikiowa/napcat-docker:latest
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - ./data/caddy:/data:Z
+      - ./docker-config/caddy:/config:Z
+    depends_on:
+      - core
     networks:
       - maim_bot
+
   sqlite-web:
+    profiles:
+      - sqlite-web
     # 注意：coleifer/sqlite-web 镜像不支持arm64
-    image: coleifer/sqlite-web
+    image: coleifer/sqlite-web:latest
     container_name: sqlite-web
-    restart: always
+    restart: unless-stopped
     ports:
       - "8120:8080"
     volumes:
-      - ./data/MaiMBot:/data/MaiMBot
+      - ./data/MaiMBot:/data/MaiMBot:z
     environment:
       - SQLITE_DATABASE=MaiMBot/MaiBot.db  # 你的数据库文件
     networks:
@@ -80,21 +122,20 @@ services:
 
   # chat2db占用相对较高但是功能强大
   # 内存占用约600m，内存充足推荐选此
-  # chat2db:
-  #   image: chat2db/chat2db:latest
-  #   container_name: maim-bot-chat2db
-  #   restart: always
-  #   ports:
-  #     - "10824:10824"
-  #   volumes:
-  #     - ./data/MaiMBot:/data/MaiMBot
-  #   networks:
-  #     - maim_bot
-  
-# volumes:         #  若需要持久化Python包时启用
-#   site-packages:
-#   caddy_data:
-#   caddy_config:
+  chat2db:
+    profiles:
+      - chat2db
+    image: chat2db/chat2db:latest
+    container_name: maim-bot-chat2db
+    restart: unless-stopped
+    ports:
+      - "10824:10824"
+    volumes:
+      - ./data/MaiMBot:/data/MaiMBot:z
+      - ./data/chat2db:/root/.chat2db/db:Z
+    networks:
+      - maim_bot
+
 networks:
   maim_bot:
     driver: bridge
