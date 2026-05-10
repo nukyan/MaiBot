@@ -13,7 +13,7 @@ logger = get_logger("jargon_explainer")
 
 def search_jargon(
     keyword: str,
-    chat_id: Optional[str] = None,
+    chat_id: Optional[List[str]] = None,
     limit: int = 10,
     case_sensitive: bool = False,
     fuzzy: bool = True,
@@ -23,9 +23,10 @@ def search_jargon(
 
     Args:
         keyword: 搜索关键词
-        chat_id: 可选的聊天 ID（session_id）
+        chat_id: 可选的聊天 ID 列表（session_id）
             - 如果开启了 all_global：此参数被忽略，查询所有 is_global=True 的记录
-            - 如果关闭了 all_global：如果提供则优先搜索该聊天或 global 的 jargon
+            - 如果关闭了 all_global：返回 ``session_id_dict`` 命中任意一个 ID 或 ``is_global=True`` 的 jargon。
+              传入多个 ID 用于群临时会话同时纳入「当前私聊 session」和「源群 session」。
         limit: 返回结果数量限制，默认 10
         case_sensitive: 是否大小写敏感，默认 False（不敏感）
         fuzzy: 是否模糊搜索，默认 True（使用 LIKE 匹配）
@@ -61,7 +62,7 @@ def search_jargon(
         jargons = session.exec(query).all()
 
         for jargon in jargons:
-            # 如果提供了 chat_id 且 all_global=False，需要检查 session_id_dict 是否包含目标 chat_id
+            # 如果提供了 chat_id 且 all_global=False，需要检查 session_id_dict 是否命中任意目标 chat_id
             if chat_id and not global_config.expression.all_global_jargon and not jargon.is_global:
                 try:  # 解析 session_id_dict
                     session_id_dict = json.loads(jargon.session_id_dict) if jargon.session_id_dict else {}
@@ -71,8 +72,7 @@ def search_jargon(
                         f"解析 session_id_dict 失败，jargon_id={jargon.id}，原始数据：{jargon.session_id_dict}"
                     )
 
-                # 检查是否包含目标 chat_id
-                if chat_id not in session_id_dict:
+                if not any(cid in session_id_dict for cid in chat_id):
                     continue
             # 只返回有 meaning 的记录
             if not jargon.meaning.strip():

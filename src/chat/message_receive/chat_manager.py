@@ -44,6 +44,9 @@ class BotChatSession(MaiChatSession):
     ):
         self.context: Optional[SessionContext] = None
         self.accept_format: List[str] = []
+        # 群临时会话的源群线索：内存维护、随消息刷新，不参与路由也不入库。
+        self.source_group_id: Optional[str] = None
+        self.source_group_name: Optional[str] = None
 
         super().__init__(
             session_id=session_id,
@@ -65,6 +68,17 @@ class BotChatSession(MaiChatSession):
     def set_context(self, message: "SessionMessage"):
         """设置会话上下文"""
         self.context = SessionContext(message=message)
+        if not self.is_group_session:
+            # 临时会话才会带 source_group_id；好友消息不带，会让字段清空，避免旧上下文残留。
+            additional_config = message.message_info.additional_config
+            self.source_group_id = str(additional_config.get("source_group_id") or "").strip() or None
+            self.source_group_name = str(additional_config.get("source_group_name") or "").strip() or None
+
+    def compute_source_group_session_id(self) -> Optional[str]:
+        """若当前是群临时私聊，返回其源群对应的 session_id；否则返回 ``None``。"""
+        if self.is_group_session or not self.source_group_id:
+            return None
+        return SessionUtils.calculate_session_id(self.platform, group_id=self.source_group_id)
 
 
 class ChatManager:

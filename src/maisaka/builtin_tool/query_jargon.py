@@ -87,11 +87,22 @@ async def handle_tool(
     case_sensitive = bool(before_search_kwargs.get("case_sensitive", case_sensitive))
     enable_fuzzy_fallback = bool(before_search_kwargs.get("enable_fuzzy_fallback", enable_fuzzy_fallback))
 
+    # 群临时会话场景下把源群的 session_id 也并入查询范围，让对方在群里聊过的黑话在临时聊天里也能查得到。
+    chat_id_scope: Optional[List[str]] = None
+    if session_id := tool_ctx.runtime.session_id:
+        from src.chat.message_receive.chat_manager import chat_manager
+
+        chat_id_scope = [session_id]
+        if (chat_stream := chat_manager.get_session_by_session_id(session_id)) and (
+            source := chat_stream.compute_source_group_session_id()
+        ):
+            chat_id_scope.append(source)
+
     results: List[Dict[str, object]] = []
     for word in words:
         exact_matches = search_jargon(
             keyword=word,
-            chat_id=tool_ctx.runtime.session_id,
+            chat_id=chat_id_scope,
             limit=limit,
             case_sensitive=case_sensitive,
             fuzzy=False,
@@ -100,7 +111,7 @@ async def handle_tool(
         if not matched_entries and enable_fuzzy_fallback:
             matched_entries = search_jargon(
                 keyword=word,
-                chat_id=tool_ctx.runtime.session_id,
+                chat_id=chat_id_scope,
                 limit=limit,
                 case_sensitive=case_sensitive,
                 fuzzy=True,

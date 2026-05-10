@@ -388,6 +388,14 @@ class MaisakaChatLoopService:
         elif self._is_group_chat is False:
             if private_chat_prompt := str(global_config.chat.private_chat_prompts or "").strip():
                 prompt_lines.append(f"通用注意事项：\n{private_chat_prompt}")
+            if self._session_id:
+                from src.chat.message_receive.chat_manager import chat_manager
+
+                chat_stream = chat_manager.get_session_by_session_id(self._session_id)
+                if chat_stream and (src := chat_stream.source_group_id):
+                    name = chat_stream.source_group_name
+                    head = f"群「{name}」(群号 {src})" if name else f"群 {src}"
+                    prompt_lines.append(f"会话场景：这是一条从{head}发起的临时私聊；对方未必是你的好友。")
 
         if self._session_id:
             if chat_prompt := self._get_chat_prompt_for_chat(self._session_id, self._is_group_chat).strip():

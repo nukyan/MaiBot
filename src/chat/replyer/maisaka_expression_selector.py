@@ -74,6 +74,14 @@ class MaisakaExpressionSelector:
             if contains_current_session:
                 related_session_ids.update(group_session_ids)
 
+        # 群临时会话隐式继承源群的表达方式（两端 session_id 哈希依据不同，无法用 expression_groups 声明）。
+        from src.chat.message_receive.chat_manager import chat_manager
+
+        if (chat_stream := chat_manager.get_session_by_session_id(session_id)) and (
+            source_group_session_id := chat_stream.compute_source_group_session_id()
+        ):
+            related_session_ids.add(source_group_session_id)
+
         return related_session_ids, has_global_share
 
     def _load_expression_candidates(self, session_id: str) -> List[dict[str, Any]]:
