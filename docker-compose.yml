@@ -8,7 +8,7 @@ services:
     # image: sengokucola/maibot:dev
     # image: infinitycat/maibot:dev
     environment:
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
       - EULA_AGREE=1b662741904d7155d1ce1c00b3530d0d
       - PRIVACY_AGREE=9943b855e72199d0f5016ea39052f1b6
       - MAIBOT_LEGACY_0X_UPGRADE_CONFIRMED=1 # Docker 无法交互确认旧版升级迁移，默认跳过确认提示
@@ -25,34 +25,17 @@ services:
       - ./data/MaiMBot/emoji:/data/emoji # 持久化表情包
       - ./data/MaiMBot/plugins:/MaiMBot/plugins # 插件目录
       - ./data/MaiMBot/logs:/MaiMBot/logs # 日志目录
-      - ./depends-data:/MaiMBot/depends-data # 运行时资源文件
+      - ./data/MaiMBot/depends-data:/MaiMBot/depends-data # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
-    restart: always
+    restart: unless-stopped
     networks:
       - maim_bot
 
-  # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
-  # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
-  # caddy:
-  #   image: caddy:2
-  #   container_name: maibot-caddy
-  #   restart: always
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./dashboard/docs/Caddyfile.docker.example:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - core
-  #   networks:
-  #     - maim_bot
   napcat:
     environment:
       - NAPCAT_UID=1000
       - NAPCAT_GID=1000
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "6099:6099"
     volumes:
@@ -60,15 +43,40 @@ services:
       - ./data/qq:/app/.config/QQ # 持久化QQ本体
       - ./data/MaiMBot:/MaiMBot/data # 共享目录
     container_name: maim-bot-napcat
-    restart: always
+    mac_address: 02:42:ac:11:45:14
+    restart: unless-stopped
     image: mlikiowa/napcat-docker:latest
     networks:
       - maim_bot
+
+  # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
+  # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
+  caddy:
+    profiles:
+      - caddy
+    image: caddy:2-alpine
+    container_name: maim-bot-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./docker-config/caddy:/config
+    depends_on:
+      - core
+    networks:
+      - maim_bot
+
   sqlite-web:
+    profiles:
+      - sqlite-web
     # 注意：coleifer/sqlite-web 镜像不支持arm64
-    image: coleifer/sqlite-web
+    image: coleifer/sqlite-web:latest
     container_name: sqlite-web
-    restart: always
+    restart: unless-stopped
     ports:
       - "8120:8080"
     volumes:
@@ -80,21 +88,115 @@ services:
 
   # chat2db占用相对较高但是功能强大
   # 内存占用约600m，内存充足推荐选此
-  # chat2db:
-  #   image: chat2db/chat2db:latest
-  #   container_name: maim-bot-chat2db
-  #   restart: always
-  #   ports:
-  #     - "10824:10824"
-  #   volumes:
-  #     - ./data/MaiMBot:/data/MaiMBot
-  #   networks:
-  #     - maim_bot
-  
-# volumes:         #  若需要持久化Python包时启用
-#   site-packages:
-#   caddy_data:
-#   caddy_config:
+  chat2db:
+    profiles:
+      - chat2db
+    image: chat2db/chat2db:latest
+    container_name: maim-bot-chat2db
+    restart: unless-stopped
+    ports:
+      - "10824:10824"
+    volumes:
+      - ./data/MaiMBot:/data/MaiMBot
+      - ./data/chat2db:/root/.chat2db/db
+    networks:
+      - maim_bot
+
+  # https://github.com/CJackHwang/ds2api/blob/aa29084/docker-compose.yml
+  ds2api:
+    profiles:
+      - ds2api
+    image: ghcr.io/cjackhwang/ds2api:latest
+    container_name: ds2api
+    restart: unless-stopped
+    ports:
+      - "6011:5001"
+    volumes:
+      - ./docker-config/ds2api/config.json:/data/config.json
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
+      - DS2API_CONFIG_PATH=/data/config.json
+    networks:
+      - maim_bot
+
+  # https://github.com/Wei-Shaw/sub2api/blob/a1106e8/deploy/docker-compose.local.yml
+  sub2api:
+    profiles:
+      - sub2api
+    image: weishaw/sub2api:latest
+    container_name: sub2api
+    restart: unless-stopped
+    ports:
+      - "6012:8080"
+    volumes:
+      - ./data/sub2api:/app/data
+      - ./docker-config/sub2api:/app/config
+    depends_on:
+      - postgres
+      - valkey
+    environment:
+      - AUTO_SETUP=true
+      - DATA_DIR=/app/config
+      - DATABASE_HOST=postgres
+      - DATABASE_DBNAME=${POSTGRES_DB:-sub2api}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-sub2api}
+      - DATABASE_USER=${POSTGRES_USER:-sub2api}
+      - REDIS_HOST=valkey
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
+      - ANTIGRAVITY_OAUTH_CLIENT_SECRET=${ANTIGRAVITY_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_CLI_OAUTH_CLIENT_SECRET=${GEMINI_CLI_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_OAUTH_CLIENT_ID=${GEMINI_OAUTH_CLIENT_ID:-}
+      - GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}
+      - GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}
+      - SECURITY_URL_ALLOWLIST_ENABLED=false
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
+      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=true
+      - TZ=${TZ:-Asia/Shanghai}
+    networks:
+      - maim_bot
+
+  postgres:
+    profiles:
+      - sub2api
+    image: postgres:18-alpine
+    container_name: sub2api-postgres
+    restart: unless-stopped
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sub2api}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sub2api}
+      - POSTGRES_DB=${POSTGRES_DB:-sub2api}
+      - PGDATA=/var/lib/postgresql/data
+      - TZ=${TZ:-Asia/Shanghai}
+    networks:
+      - maim_bot
+
+  valkey:
+    profiles:
+      - sub2api
+    image: valkey/valkey:8-alpine
+    container_name: sub2api-valkey
+    restart: unless-stopped
+    volumes:
+      - ./data/redis_data:/data
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-}
+      VALKEY_EXTRA_FLAGS: >-
+        --save 60 1
+        --appendonly yes
+        --appendfsync everysec
+        ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}
+    networks:
+      - maim_bot
+
 networks:
   maim_bot:
     driver: bridge
