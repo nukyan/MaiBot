@@ -4,6 +4,7 @@ import binascii
 import io
 import json
 import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -1089,6 +1090,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
     reasoning_key: str
     tool_argument_parse_mode: ToolArgumentParseMode
 
+    _REASONING_CACHE_MAX_SIZE = 256
+    """``tool_call_id -> reasoning_content`` 缓存的最大条目数，超出按 LRU 淘汰。"""
+
     def __init__(self, api_provider: APIProvider) -> None:
         """初始化 OpenAI 兼容客户端。
 
@@ -1110,6 +1114,65 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             default_headers=client_config.default_headers or None,
             default_query=client_config.default_query or None,
         )
+        self._reasoning_cache = OrderedDict()
+
+    def _remember_assistant_reasoning_content(self, api_response: APIResponse) -> None:
+        """把响应中带工具调用的 ``reasoning_content`` 按 ``tool_call_id`` 写入 LRU 缓存。"""
+
+        reasoning_content = api_response.reasoning_content
+        if not reasoning_content or not api_response.tool_calls:
+            return
+        cache = self._reasoning_cache
+        for tool_call in api_response.tool_calls:
+            cache[tool_call.call_id] = reasoning_content
+            cache.move_to_end(tool_call.call_id)
+        while len(cache) > self._REASONING_CACHE_MAX_SIZE:
+            cache.popitem(last=False)
+
+    def _hydrate_reasoning_content_from_cache(
+        self,
+        messages: List[ChatCompletionMessageParam],
+    ) -> None:
+        """对历史中带工具调用的 assistant，若自身缺少 ``reasoning_content``，按
+        ``tool_call_id`` 自动从缓存补回，让 ``_inject_assistant_reasoning_content`` 接管后续
+        carry-forward 与 provider 字段名转换。"""
+
+        cache = self._reasoning_cache
+        if not cache:
+            return
+        for message in messages:
+            if message.get("role") != "assistant":
+                continue
+            payload = cast(Dict[str, Any], message)
+            if payload.get("reasoning_content"):
+                continue
+            for tool_call in payload.get("tool_calls") or ():
+                if cached := cache.get(tool_call.get("id")):
+                    payload["reasoning_content"] = cached
+                    break
+
+    def _inject_assistant_reasoning_content(
+        self,
+        messages: List[ChatCompletionMessageParam],
+    ) -> None:
+        """按 DeepSeek 思考模式协议原地补齐 / 清理 assistant 思维链字段。
+
+        从带工具调用的 assistant 开始，到下一个 user 之前，后续 assistant 必须回传同一段
+        真实思维链；未进入工具调用链时，思维链会被 API 忽略，直接清理掉。
+        """
+
+        active_reasoning_content: str | None = None
+        for message in messages:
+            role = message.get("role")
+            if role == "user":
+                active_reasoning_content = None
+            elif role == "assistant":
+                payload = cast(Dict[str, Any], message)
+                own_reasoning_content = payload.pop("reasoning_content", None)
+                if payload.get("tool_calls"):
+                    active_reasoning_content = own_reasoning_content or active_reasoning_content
+                if active_reasoning_content:
+                    payload[self.reasoning_key] = active_reasoning_content
 
     def _build_default_stream_response_handler(
         self,
@@ -1201,6 +1264,8 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 else _sanitize_messages_for_toolless_request(request.message_list)
             )
             messages_payload: List[ChatCompletionMessageParam] = _convert_messages(request_messages)
+            self._hydrate_reasoning_content_from_cache(messages_payload)
+            self._inject_assistant_reasoning_content(messages_payload)
             tools_payload: List[ChatCompletionToolParam] | None = (
                 _convert_tool_options(request.tool_options) if request.tool_options else None
             )
@@ -1261,7 +1326,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                     AsyncStream[ChatCompletionChunk],
                     await await_task_with_interrupt(stream_task, request.interrupt_flag),
                 )
-                return await stream_response_handler(raw_response, request.interrupt_flag)
+                api_response, usage_record = await stream_response_handler(raw_response, request.interrupt_flag)
+                self._remember_assistant_reasoning_content(api_response)
+                return api_response, usage_record
 
             completion_task: asyncio.Task[ChatCompletion] = asyncio.create_task(
                 self.client.chat.completions.create(
@@ -1281,7 +1348,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 ChatCompletion,
                 await await_task_with_interrupt(completion_task, request.interrupt_flag),
             )
-            return response_parser(raw_response)
+            api_response, usage_record = response_parser(raw_response)
+            self._remember_assistant_reasoning_content(api_response)
+            return api_response, usage_record
         except (EmptyResponseException, RespParseException) as exc:
             snapshot_path = save_failed_request_snapshot(
                 api_provider=self.api_provider,
