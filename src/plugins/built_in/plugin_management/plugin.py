@@ -84,7 +84,6 @@ class PluginManagementPlugin(MaiBotPlugin):
         permission_list = permission_result if isinstance(permission_result, list) else []
         scoped_user_id = _build_scoped_user_id(platform, user_id)
         if not scoped_user_id or scoped_user_id not in _normalize_permission_list(permission_list):
-            await self.ctx.send.text("你没有权限使用插件管理命令", stream_id)
             return False, "没有权限", True
 
         if not stream_id:
