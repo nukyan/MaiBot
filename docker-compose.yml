@@ -41,7 +41,6 @@ services:
     volumes:
       - ./docker-config/napcat:/app/napcat/config # 持久化napcat配置文件
       - ./data/qq:/app/.config/QQ # 持久化QQ本体
-      - ./data/MaiMBot:/MaiMBot/data # 共享目录
     container_name: maim-bot-napcat
     mac_address: 02:42:ac:11:45:14
     restart: unless-stopped
