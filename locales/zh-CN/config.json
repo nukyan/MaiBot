@@ -26,6 +26,7 @@
   "config.model_name_duplicate": "模型名称存在重复，请检查配置文件。",
   "config.model_name_empty": "模型名称不能为空，请在配置中设置有效的模型名称。",
   "config.model_not_initialized": "model_config 未初始化",
+  "config.model_wire_api_invalid": "模型 '{model_name}' 的 wire_api '{wire_api}' 不合法，可选值为 'chat' 或 'responses'。",
   "config.models_empty": "模型列表不能为空，请在配置中设置有效的模型列表。",
   "config.parse_failed": "配置文件 {file_name} 解析失败",
   "config.reload_callback_failed": "配置重载回调执行失败: {error}",

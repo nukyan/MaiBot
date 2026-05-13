@@ -102,6 +102,8 @@ export const DEFAULT_MODEL_INFO = {
   max_tokens: null,
   visual: false,
   force_stream_mode: false,
+  // OpenAI 兼容客户端的 wire 协议，默认 chat（/v1/chat/completions）。
+  wire_api: 'chat' as const,
   extra_params: {},
 } as const
 

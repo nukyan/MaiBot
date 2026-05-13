@@ -26,6 +26,7 @@
   "config.model_name_duplicate": "モデル名が重複しています。設定ファイルを確認してください。",
   "config.model_name_empty": "モデル名は空にできません。設定に有効なモデル名を設定してください。",
   "config.model_not_initialized": "model_config が初期化されていません",
+  "config.model_wire_api_invalid": "モデル '{model_name}' の wire_api '{wire_api}' は無効です。指定可能な値は 'chat' または 'responses' です。",
   "config.models_empty": "モデルリストは空にできません。設定に有効なモデルリストを設定してください。",
   "config.parse_failed": "設定ファイル {file_name} の解析に失敗しました",
   "config.reload_callback_failed": "設定リロードのコールバック実行に失敗しました: {error}",

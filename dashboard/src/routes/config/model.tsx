@@ -520,6 +520,7 @@ function ModelConfigPageContent() {
       cache_price_in: model.cache_price_in ?? 0,
       visual: model.visual ?? false,
       force_stream_mode: model.force_stream_mode ?? false,
+      wire_api: model.wire_api ?? 'chat',
       extra_params: model.extra_params ?? {},
     }
     // 只有在有值时才添加可选字段
@@ -658,6 +659,7 @@ function ModelConfigPageContent() {
         max_tokens: null,
         visual: false,
         force_stream_mode: false,
+        wire_api: 'chat',
         extra_params: {},
       }
     )
@@ -756,6 +758,7 @@ function ModelConfigPageContent() {
       cache_price_in: editingModel.cache_price_in ?? 0,
       visual: editingModel.visual ?? false,
       force_stream_mode: editingModel.force_stream_mode ?? false,
+      wire_api: editingModel.wire_api ?? 'chat',
       extra_params: editingModel.extra_params ?? {},
     }
     
@@ -2008,6 +2011,48 @@ function ModelConfigPageContent() {
                       )
                     }
                   />
+                </div>
+
+                {/* OpenAI 兼容客户端的 wire 协议选择，非 OpenAI 客户端会忽略该字段 */}
+                <div className="flex items-center justify-between gap-4 border-t pt-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="wire_api" className="cursor-pointer">OpenAI 接口协议（wire_api）</Label>
+                      <HelpTooltip
+                        content={
+                          <div className="space-y-2">
+                            <p className="font-medium">何时选择 Responses？</p>
+                            <ul className="list-disc list-inside space-y-1 text-xs">
+                              <li><strong>chat</strong>：默认值，走 <code>/v1/chat/completions</code>，兼容绝大多数厂商和自建服务。</li>
+                              <li><strong>responses</strong>：走 <code>/v1/responses</code>，适用于 GPT-5、o 系列等显式要求 Responses API 的 OpenAI 模型。</li>
+                            </ul>
+                            <p className="text-xs text-muted-foreground">仅对 OpenAI 兼容客户端生效，其他客户端（如 Gemini）会忽略该选项。</p>
+                          </div>
+                        }
+                        side="right"
+                        maxWidth="380px"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      选择该模型在 OpenAI 客户端下使用的 API 协议
+                    </p>
+                  </div>
+                  <Select
+                    value={editingModel?.wire_api ?? 'chat'}
+                    onValueChange={(value) =>
+                      setEditingModel((prev) =>
+                        prev ? { ...prev, wire_api: value as 'chat' | 'responses' } : null
+                      )
+                    }
+                  >
+                    <SelectTrigger id="wire_api" className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="chat">chat（默认）</SelectItem>
+                      <SelectItem value="responses">responses</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
