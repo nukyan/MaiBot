@@ -20,12 +20,12 @@ services:
 #      - "8000:8000"
     volumes:
       # 监听地址和端口已迁移到 ./docker-config/mmc/bot_config.toml 的 maim_message 与 webui 配置段
-      - ./docker-config/mmc:/MaiMBot/config # 持久化bot配置文件
-      - ./data/MaiMBot:/MaiMBot/data # 共享目录
-      - ./data/MaiMBot/emoji:/data/emoji # 持久化表情包
-      - ./data/MaiMBot/plugins:/MaiMBot/plugins # 插件目录
-      - ./data/MaiMBot/logs:/MaiMBot/logs # 日志目录
-      - ./data/MaiMBot/depends-data:/MaiMBot/depends-data # 运行时资源文件
+      - ./docker-config/mmc:/MaiMBot/config:Z # 持久化bot配置文件
+      - ./data/MaiMBot:/MaiMBot/data:z # 共享目录
+      - ./data/MaiMBot/emoji:/data/emoji:Z # 持久化表情包
+      - ./data/MaiMBot/plugins:/MaiMBot/plugins:Z # 插件目录
+      - ./data/MaiMBot/logs:/MaiMBot/logs:Z # 日志目录
+      - ./data/MaiMBot/depends-data:/MaiMBot/depends-data:Z # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
     restart: unless-stopped
     networks:
@@ -39,8 +39,8 @@ services:
     ports:
       - "6099:6099"
     volumes:
-      - ./docker-config/napcat:/app/napcat/config # 持久化napcat配置文件
-      - ./data/qq:/app/.config/QQ # 持久化QQ本体
+      - ./docker-config/napcat:/app/napcat/config:Z # 持久化napcat配置文件
+      - ./data/qq:/app/.config/QQ:Z # 持久化QQ本体
     container_name: maim-bot-napcat
     mac_address: 02:42:ac:11:45:14
     restart: unless-stopped
@@ -61,9 +61,9 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./data/caddy:/data
-      - ./docker-config/caddy:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - ./data/caddy:/data:Z
+      - ./docker-config/caddy:/config:Z
     depends_on:
       - core
     networks:
@@ -79,7 +79,7 @@ services:
     ports:
       - "8120:8080"
     volumes:
-      - ./data/MaiMBot:/data/MaiMBot
+      - ./data/MaiMBot:/data/MaiMBot:z
     environment:
       - SQLITE_DATABASE=MaiMBot/MaiBot.db  # 你的数据库文件
     networks:
@@ -96,8 +96,8 @@ services:
     ports:
       - "10824:10824"
     volumes:
-      - ./data/MaiMBot:/data/MaiMBot
-      - ./data/chat2db:/root/.chat2db/db
+      - ./data/MaiMBot:/data/MaiMBot:z
+      - ./data/chat2db:/root/.chat2db/db:Z
     networks:
       - maim_bot
 
