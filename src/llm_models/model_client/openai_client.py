@@ -34,7 +34,7 @@ from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from PIL import Image as PILImage
 
 from src.common.logger import get_logger
-from src.config.model_configs import APIProvider, ReasoningParseMode, ToolArgumentParseMode
+from src.config.model_configs import APIProvider, ReasoningParseMode, ToolArgumentParseMode, WireApi
 from src.llm_models.exceptions import (
     EmptyResponseException,
     NetworkConnectionError,
@@ -45,6 +45,14 @@ from src.llm_models.exceptions import (
 from src.llm_models.openai_compat import (
     build_openai_compatible_client_config,
     split_openai_request_overrides,
+)
+from src.llm_models.openai_responses import (
+    RESPONSES_RESERVED_EXTRA_BODY_KEYS,
+    convert_messages_to_response_input,
+    convert_response_format,
+    convert_tool_options as _convert_responses_tool_options,
+    default_stream_response_handler as _default_responses_stream_response_handler,
+    parse_response as _default_responses_response_parser,
 )
 from src.llm_models.payload_content.message import ImageMessagePart, Message, RoleType, TextMessagePart
 from src.llm_models.payload_content.resp_format import RespFormat, RespFormatType
@@ -1238,6 +1246,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
     ) -> Tuple[APIResponse, UsageTuple | None]:
         """执行 OpenAI 兼容的文本/多模态响应请求。
 
+        会根据 ``request.model_info.wire_api`` 选择 ``/v1/chat/completions``（默认）或 ``/v1/responses``
+        作为目标端点；Responses API 链路的具体实现见 ``_execute_responses_api_request``。
+
         Args:
             request: 统一响应请求对象。
             stream_response_handler: 流式响应处理器。
@@ -1246,6 +1257,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
         Returns:
             Tuple[APIResponse, UsageTuple | None]: 统一响应对象与可选使用量信息。
         """
+        if request.model_info.wire_api == WireApi.RESPONSES.value:
+            return await self._execute_responses_api_request(request)
+
         snapshot_provider_request = {
             "base_url": self.api_provider.base_url,
             "endpoint": "/chat/completions",
@@ -1401,6 +1415,177 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 internal_request=serialize_response_request_snapshot(request),
                 model_info=model_info,
                 operation="chat.completions.create",
+                provider_request=snapshot_provider_request,
+            )
+            attach_request_snapshot(exc, snapshot_path)
+            raise
+
+    async def _execute_responses_api_request(
+        self,
+        request: ResponseRequest,
+    ) -> Tuple[APIResponse, UsageTuple | None]:
+        """执行 OpenAI Responses API（``/v1/responses``）请求。
+
+        请求体与流式事件的具体转换由 ``openai_responses`` 模块负责，本方法只负责 SDK 调用、
+        快照保存与异常包装。
+        """
+        snapshot_provider_request: Dict[str, Any] = {
+            "base_url": self.api_provider.base_url,
+            "endpoint": "/responses",
+            "method": "POST",
+            "operation": "responses.create",
+            "organization": self.api_provider.organization,
+            "project": self.api_provider.project,
+            "request_kwargs": {},
+        }
+        model_info = request.model_info
+
+        try:
+            request_messages = (
+                list(request.message_list)
+                if request.tool_options
+                else _sanitize_messages_for_toolless_request(request.message_list)
+            )
+            input_payload = convert_messages_to_response_input(request_messages)
+            tools_payload = (
+                _convert_responses_tool_options(request.tool_options) if request.tool_options else None
+            )
+            text_config = convert_response_format(request.response_format)
+            request_overrides = split_openai_request_overrides(
+                request.extra_params,
+                reserved_body_keys=RESPONSES_RESERVED_EXTRA_BODY_KEYS,
+            )
+
+            temperature_argument = (
+                omit if "temperature" in request_overrides.extra_body else _coerce_openai_argument(request.temperature)
+            )
+            # Responses API 使用 max_output_tokens；同时识别 max_tokens 别名，避免与 chat 配置冲突。
+            max_output_tokens_argument = (
+                omit
+                if "max_tokens" in request_overrides.extra_body
+                or "max_output_tokens" in request_overrides.extra_body
+                else _coerce_openai_argument(request.max_tokens)
+            )
+            text_argument: Any = text_config if text_config is not None else omit
+            tools_argument: Any = tools_payload or omit
+
+            snapshot_provider_request["request_kwargs"] = {
+                "extra_body": request_overrides.extra_body or None,
+                "extra_headers": request_overrides.extra_headers or None,
+                "extra_query": request_overrides.extra_query or None,
+                "input": input_payload,
+                "max_output_tokens": _snapshot_openai_argument(max_output_tokens_argument),
+                "model": model_info.model_identifier,
+                "stream": bool(model_info.force_stream_mode),
+                "temperature": _snapshot_openai_argument(temperature_argument),
+                "text": _snapshot_openai_argument(text_argument),
+                "tools": tools_payload,
+            }
+            _save_debug_provider_request_payload(
+                model_info.name,
+                {
+                    "base_url": self.api_provider.base_url,
+                    "endpoint": "/responses",
+                    "model_name": model_info.name,
+                    "model_identifier": model_info.model_identifier,
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                    "request_kwargs": snapshot_provider_request["request_kwargs"],
+                },
+            )
+
+            if model_info.force_stream_mode:
+                stream_task: asyncio.Task[Any] = asyncio.create_task(
+                    self.client.responses.create(
+                        model=model_info.model_identifier,
+                        input=input_payload,
+                        tools=tools_argument,
+                        temperature=temperature_argument,
+                        max_output_tokens=max_output_tokens_argument,
+                        text=text_argument,
+                        stream=True,
+                        extra_headers=request_overrides.extra_headers or None,
+                        extra_query=request_overrides.extra_query or None,
+                        extra_body=request_overrides.extra_body or None,
+                    )
+                )
+                raw_stream = await await_task_with_interrupt(stream_task, request.interrupt_flag)
+                return await _default_responses_stream_response_handler(
+                    raw_stream,
+                    request.interrupt_flag,
+                    reasoning_parse_mode=self.reasoning_parse_mode,
+                    tool_argument_parse_mode=self.tool_argument_parse_mode,
+                )
+
+            response_task: asyncio.Task[Any] = asyncio.create_task(
+                self.client.responses.create(
+                    model=model_info.model_identifier,
+                    input=input_payload,
+                    tools=tools_argument,
+                    temperature=temperature_argument,
+                    max_output_tokens=max_output_tokens_argument,
+                    text=text_argument,
+                    stream=False,
+                    extra_headers=request_overrides.extra_headers or None,
+                    extra_query=request_overrides.extra_query or None,
+                    extra_body=request_overrides.extra_body or None,
+                )
+            )
+            raw_response = await await_task_with_interrupt(response_task, request.interrupt_flag)
+            return _default_responses_response_parser(
+                raw_response,
+                reasoning_parse_mode=self.reasoning_parse_mode,
+                tool_argument_parse_mode=self.tool_argument_parse_mode,
+            )
+        except (EmptyResponseException, RespParseException) as exc:
+            snapshot_path = save_failed_request_snapshot(
+                api_provider=self.api_provider,
+                client_type="openai",
+                error=exc,
+                internal_request=serialize_response_request_snapshot(request),
+                model_info=model_info,
+                operation="responses.create",
+                provider_request=snapshot_provider_request,
+            )
+            attach_request_snapshot(exc, snapshot_path)
+            raise
+        except APIConnectionError as exc:
+            snapshot_path = save_failed_request_snapshot(
+                api_provider=self.api_provider,
+                client_type="openai",
+                error=exc,
+                internal_request=serialize_response_request_snapshot(request),
+                model_info=model_info,
+                operation="responses.create",
+                provider_request=snapshot_provider_request,
+            )
+            wrapped_error = NetworkConnectionError(str(exc))
+            attach_request_snapshot(wrapped_error, snapshot_path)
+            raise wrapped_error from exc
+        except APIStatusError as exc:
+            snapshot_path = save_failed_request_snapshot(
+                api_provider=self.api_provider,
+                client_type="openai",
+                error=exc,
+                internal_request=serialize_response_request_snapshot(request),
+                model_info=model_info,
+                operation="responses.create",
+                provider_request=snapshot_provider_request,
+            )
+            wrapped_error = RespNotOkException(exc.status_code, _build_api_status_message(exc))
+            attach_request_snapshot(wrapped_error, snapshot_path)
+            raise wrapped_error from exc
+        except ReqAbortException:
+            raise
+        except Exception as exc:
+            if has_request_snapshot(exc):
+                raise
+            snapshot_path = save_failed_request_snapshot(
+                api_provider=self.api_provider,
+                client_type="openai",
+                error=exc,
+                internal_request=serialize_response_request_snapshot(request),
+                model_info=model_info,
+                operation="responses.create",
                 provider_request=snapshot_provider_request,
             )
             attach_request_snapshot(exc, snapshot_path)

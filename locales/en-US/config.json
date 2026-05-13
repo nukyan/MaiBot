@@ -26,6 +26,7 @@
   "config.model_name_duplicate": "Duplicate model names detected. Please check the configuration file.",
   "config.model_name_empty": "Model name cannot be empty. Please set a valid model name in the configuration.",
   "config.model_not_initialized": "model_config is not initialized",
+  "config.model_wire_api_invalid": "Invalid wire_api '{wire_api}' for model '{model_name}'. Allowed values are 'chat' or 'responses'.",
   "config.models_empty": "Model list cannot be empty. Please set a valid list of models in the configuration.",
   "config.parse_failed": "Failed to parse config file {file_name}",
   "config.reload_callback_failed": "Config reload callback failed: {error}",

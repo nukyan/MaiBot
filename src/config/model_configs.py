@@ -32,6 +32,18 @@ class ToolArgumentParseMode(str, Enum):
     DOUBLE_DECODE = "double_decode"
 
 
+class WireApi(str, Enum):
+    """OpenAI 兼容客户端使用的 wire 协议。
+
+    - `chat`: 走 ``/v1/chat/completions`` 接口（Chat Completions API），与历史行为一致。
+    - `responses`: 走 ``/v1/responses`` 接口（Responses API），适用于 gpt-5、o 系列等支持
+      Responses 协议的模型；该协议在消息结构、工具结构、流式事件等方面与 Chat Completions 不同。
+    """
+
+    CHAT = "chat"
+    RESPONSES = "responses"
+
+
 class APIProvider(ConfigBase):
     """API提供商配置类"""
 
@@ -336,6 +348,18 @@ class ModelInfo(ConfigBase):
     )
     """是否为多模态模型。开启后表示该模型支持视觉输入。"""
 
+    wire_api: str = Field(
+        default=WireApi.CHAT.value,
+        json_schema_extra={
+            "x-widget": "select",
+            "x-icon": "plug",
+            "options": [WireApi.CHAT.value, WireApi.RESPONSES.value],
+        },
+    )
+    """OpenAI 兼容客户端使用的 wire 协议。可选值：`chat`（默认，走 /v1/chat/completions）、
+    `responses`（走 /v1/responses，适用于 gpt-5、o 系列等支持 Responses API 的模型）。
+    仅当 `api_provider.client_type=openai` 时生效；其他客户端类型会忽略该字段。"""
+
     extra_params: dict[str, Any] = Field(
         default_factory=dict,
         json_schema_extra={
@@ -358,6 +382,10 @@ class ModelInfo(ConfigBase):
             raise ValueError(t("config.model_name_empty"))
         if not self.api_provider:
             raise ValueError(t("config.model_api_provider_empty"))
+        try:
+            self.wire_api = WireApi(self.wire_api.strip().lower()).value
+        except ValueError as exc:
+            raise ValueError(t("config.model_wire_api_invalid", model_name=self.name, wire_api=self.wire_api)) from exc
         return super().model_post_init(context)
 
 

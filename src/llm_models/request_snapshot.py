@@ -266,6 +266,7 @@ def serialize_model_info_snapshot(model_info: ModelInfo) -> dict[str, Any]:
         "name": model_info.name,
         "temperature": model_info.temperature,
         "visual": model_info.visual,
+        "wire_api": model_info.wire_api,
     }
 
 
@@ -283,6 +284,7 @@ def deserialize_model_info_snapshot(raw_model_info: Any) -> ModelInfo:
         name=str(raw_model_info.get("name") or ""),
         temperature=raw_model_info.get("temperature"),
         visual=bool(raw_model_info.get("visual", False)),
+        wire_api=raw_model_info.get("wire_api") or "chat",
     )
 
 
