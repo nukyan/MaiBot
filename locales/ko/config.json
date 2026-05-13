@@ -26,6 +26,7 @@
   "config.model_name_duplicate": "모델 이름이 중복되었습니다. 설정 파일을 확인해 주세요.",
   "config.model_name_empty": "모델 이름은 비워둘 수 없습니다. 설정에서 유효한 모델 이름을 입력해 주세요.",
   "config.model_not_initialized": "model_config 가 초기화되지 않았습니다",
+  "config.model_wire_api_invalid": "모델 '{model_name}' 의 wire_api '{wire_api}' 가 유효하지 않습니다. 허용된 값은 'chat' 또는 'responses' 입니다.",
   "config.models_empty": "모델 목록은 비워둘 수 없습니다. 설정에서 유효한 모델 목록을 입력해 주세요.",
   "config.parse_failed": "설정 파일 {file_name} 파싱에 실패했습니다",
   "config.reload_callback_failed": "설정 리로드 콜백 실행 실패: {error}",

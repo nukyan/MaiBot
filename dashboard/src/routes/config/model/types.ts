@@ -3,6 +3,13 @@
  */
 
 /**
+ * OpenAI 兼容客户端使用的 wire 协议。
+ * - chat: 走 /v1/chat/completions（默认）。
+ * - responses: 走 /v1/responses（适用于 gpt-5 / o 系列等支持 Responses API 的模型）。
+ */
+export type ModelWireApi = 'chat' | 'responses'
+
+/**
  * 模型信息
  */
 export interface ModelInfo {
@@ -17,6 +24,7 @@ export interface ModelInfo {
   max_tokens?: number | null   // 模型级别最大token数，覆盖任务配置中的max_tokens
   visual?: boolean
   force_stream_mode?: boolean
+  wire_api?: ModelWireApi
   extra_params?: Record<string, unknown>
 }
 

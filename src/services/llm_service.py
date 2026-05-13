@@ -58,7 +58,7 @@ class LLMServiceClient:
         """
         self.task_name = _resolve_task_name(task_name)
         self.request_type = request_type
-        self.session_id = str(session_id or "").strip()
+        self.session_id = session_id.strip()
         self._orchestrator = LLMOrchestrator(task_name=self.task_name, request_type=request_type)
 
     @staticmethod
