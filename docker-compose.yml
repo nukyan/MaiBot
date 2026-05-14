@@ -27,6 +27,7 @@ services:
       - ./data/MaiMBot/logs:/MaiMBot/logs:Z # 日志目录
       - ./data/MaiMBot/depends-data:/MaiMBot/depends-data:Z # 运行时资源文件
       # - site-packages:/usr/local/lib/python3.13/site-packages # 持久化Python包，需要时启用
+    entrypoint: uv run --no-sync bot.py
     restart: unless-stopped
     networks:
       - maim_bot
@@ -42,7 +43,7 @@ services:
       - ./docker-config/napcat:/app/napcat/config:Z # 持久化napcat配置文件
       - ./data/qq:/app/.config/QQ:Z # 持久化QQ本体
     container_name: maim-bot-napcat
-    mac_address: 02:42:ac:11:45:14
+    mac_address: DE:C0:DE:C0:FF:EE
     restart: unless-stopped
     image: mlikiowa/napcat-docker:latest
     networks:
