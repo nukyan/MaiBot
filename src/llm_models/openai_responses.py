@@ -54,21 +54,16 @@ RESPONSES_RESERVED_EXTRA_BODY_KEYS: set[str] = {
 """不应落入 ``extra_body`` 的字段集合（已由 SDK 原生参数承载）。"""
 
 
-def _extract_text(message: InternalMessage) -> str:
-    """提取消息中所有 TextMessagePart 并拼接。"""
-    return "".join(part.text for part in message.parts if isinstance(part, TextMessagePart))
-
-
 def convert_messages_to_response_input(messages: List[InternalMessage]) -> ResponseInputParam:
     """将内部消息列表转换为 Responses API 的 ``input`` 字段。"""
     from .model_client.openai_client import _normalize_image_part_for_openai
 
     converted: ResponseInputParam = []
     for message in messages:
-        if message.role == RoleType.System:
-            text = _extract_text(message)
-            converted.append({"role": "system", "content": [{"type": "input_text", "text": text}] if text else []})
+        text = "".join(part.text for part in message.parts if isinstance(part, TextMessagePart))
 
+        if message.role == RoleType.System:
+            converted.append({"role": "system", "content": [{"type": "input_text", "text": text}] if text else []})
         elif message.role == RoleType.User:
             user_content: List[ResponseInputContentParam] = []
             for part in message.parts:
@@ -86,27 +81,24 @@ def convert_messages_to_response_input(messages: List[InternalMessage]) -> Respo
                             "detail": "auto",
                         })
             converted.append({"role": "user", "content": user_content})
-
         elif message.role == RoleType.Assistant:
-            assistant_text = _extract_text(message)
-            if assistant_text:
-                converted.append({"role": "assistant", "content": assistant_text})
-            for tool_call in message.tool_calls or []:
-                converted.append({
+            if text:
+                converted.append({"role": "assistant", "content": text})
+            converted.extend(
+                {
                     "type": "function_call",
                     "call_id": tool_call.call_id,
                     "name": tool_call.func_name,
                     "arguments": json.dumps(tool_call.args or {}, ensure_ascii=False),
-                })
-
+                }
+                for tool_call in message.tool_calls or []
+            )
         elif message.role == RoleType.Tool:
-            tool_text = _extract_text(message)
             converted.append({
                 "type": "function_call_output",
                 "call_id": message.tool_call_id,
-                "output": tool_text,
+                "output": text,
             })
-
         else:
             raise ValueError(f"不支持的消息角色：{message.role}")
 
@@ -247,13 +239,15 @@ class _ResponsesStreamAccumulator:
     def process_event(self, event: ResponseStreamEvent) -> None:
         event_type = event.type
 
-        if event_type == "response.output_text.delta":
-            if event.delta:
-                self.content_chunks.append(event.delta)
+        if event_type == "response.output_text.delta" and event.delta:
+            self.content_chunks.append(event.delta)
 
-        elif event_type in {"response.reasoning_text.delta", "response.reasoning_summary_text.delta"}:
-            if self.reasoning_parse_mode != ReasoningParseMode.NONE and event.delta:
-                self.reasoning_chunks.append(event.delta)
+        elif (
+            event_type in {"response.reasoning_text.delta", "response.reasoning_summary_text.delta"}
+            and self.reasoning_parse_mode != ReasoningParseMode.NONE
+            and event.delta
+        ):
+            self.reasoning_chunks.append(event.delta)
 
         elif event_type in {"response.output_item.added", "response.output_item.done"}:
             item = event.item
@@ -266,9 +260,8 @@ class _ResponsesStreamAccumulator:
                 if event_type == "response.output_item.done" and item.arguments and not state.arguments:
                     state.arguments.append(item.arguments)
 
-        elif event_type == "response.function_call_arguments.delta":
-            if event.delta:
-                self._function_call_state(event.output_index).arguments.append(event.delta)
+        elif event_type == "response.function_call_arguments.delta" and event.delta:
+            self._function_call_state(event.output_index).arguments.append(event.delta)
 
         elif event_type == "response.completed":
             response_obj = event.response
@@ -323,7 +316,7 @@ class _ResponsesStreamAccumulator:
         return response
 
 
-async def default_stream_response_handler(
+async def _default_stream_response_handler(
     resp_stream: AsyncStream[ResponseStreamEvent],
     interrupt_flag: asyncio.Event | None,
     *,

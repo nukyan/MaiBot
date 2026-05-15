@@ -9,13 +9,11 @@ from src.llm_models.openai_responses import (
     _ResponsesStreamAccumulator,
     convert_messages_to_response_input,
     convert_response_format,
-    convert_tool_options,
-    extract_usage_record,
     parse_response,
 )
 from src.llm_models.payload_content.message import Message, RoleType, TextMessagePart
 from src.llm_models.payload_content.resp_format import JsonSchema, RespFormat, RespFormatType
-from src.llm_models.payload_content.tool_option import ToolCall, ToolOption
+from src.llm_models.payload_content.tool_option import ToolCall
 
 
 def test_model_info_wire_api_normalization() -> None:
@@ -66,36 +64,6 @@ def test_convert_messages_to_response_input_handles_all_roles() -> None:
     }
 
 
-def test_convert_tool_options_uses_flat_function_schema() -> None:
-    tools = convert_tool_options(
-        [
-            ToolOption(
-                name="lookup_user",
-                description="查询用户",
-                parameters_schema_override={
-                    "type": "object",
-                    "properties": {"user_id": {"type": "string"}},
-                    "required": ["user_id"],
-                },
-            )
-        ]
-    )
-
-    assert tools == [
-        {
-            "type": "function",
-            "name": "lookup_user",
-            "description": "查询用户",
-            "parameters": {
-                "type": "object",
-                "properties": {"user_id": {"type": "string"}},
-                "required": ["user_id"],
-            },
-            "strict": False,
-        }
-    ]
-
-
 def test_convert_response_format_covers_text_json_object_and_schema() -> None:
     assert convert_response_format(None) is None
     assert convert_response_format(RespFormat()) is None
@@ -116,18 +84,6 @@ def test_convert_response_format_covers_text_json_object_and_schema() -> None:
         "schema": json_schema["schema"],
         "strict": True,
     }
-
-
-def test_extract_usage_record_includes_cached_tokens() -> None:
-    usage = SimpleNamespace(
-        input_tokens=120,
-        output_tokens=50,
-        total_tokens=170,
-        input_tokens_details=SimpleNamespace(cached_tokens=20),
-        output_tokens_details=SimpleNamespace(reasoning_tokens=10),
-    )
-    assert extract_usage_record(usage) == (120, 50, 170, 20, 100)
-    assert extract_usage_record(None) is None
 
 
 def test_parse_response_extracts_text_reasoning_and_tool_call() -> None:

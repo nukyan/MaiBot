@@ -51,7 +51,7 @@ from src.llm_models.openai_responses import (
     convert_messages_to_response_input,
     convert_response_format,
     convert_tool_options as _convert_responses_tool_options,
-    default_stream_response_handler as _default_responses_stream_response_handler,
+    _default_stream_response_handler as _default_responses_stream_response_handler,
     parse_response as _default_responses_response_parser,
 )
 from src.llm_models.payload_content.message import ImageMessagePart, Message, RoleType, TextMessagePart
