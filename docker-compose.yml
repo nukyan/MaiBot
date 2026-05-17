@@ -40,6 +40,12 @@ services:
     volumes:
       - ./docker-config/napcat:/app/napcat/config:Z # 持久化napcat配置文件
       - ./data/qq:/app/.config/QQ:Z # 持久化QQ本体
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - apparmor=unconfined
+      - label=disable
     container_name: maim-bot-napcat
     mac_address: DE:C0:DE:C0:FF:EE
     restart: unless-stopped
