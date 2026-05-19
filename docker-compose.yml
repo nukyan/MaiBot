@@ -33,6 +33,8 @@ services:
       - maim_bot
 
   napcat:
+    profiles:
+      - napcat
     environment:
       - TZ=${TZ:-Asia/Shanghai}
     ports:
@@ -45,11 +47,51 @@ services:
       - SYS_RESOURCE
     security_opt:
       - apparmor=unconfined
-      - label=disable
+      - label=type:unconfined_t
     container_name: maim-bot-napcat
-    mac_address: DE:C0:DE:C0:FF:EE
+    hostname: <HOSTNAME>
+    mac_address: <MAC_ADDR>
     restart: unless-stopped
     image: mlikiowa/napcat-docker:latest
+    networks:
+      - maim_bot
+
+  snowluma:
+    profiles:
+      - snowluma
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - SNOWLUMA_HOOK_AUTOLOAD=true
+    ports:
+      - "5099:5099"
+      - "5900:5900"
+      - "6081:6081"
+    volumes:
+      - ./docker-config/snowluma:/app/snowluma-data:Z
+      - ./docker-config/qq:/app/.config:Z
+      - ./data/qq:/app/.local/share:Z
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
+      - label=type:unconfined_t
+    container_name: maim-bot-snowluma
+    hostname: <HOSTNAME>
+    mac_address: <MAC_ADDR>
+    restart: unless-stopped
+    image: motricseven7/snowluma:latest
+    networks:
+      - maim_bot
+
+  searxng:
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+    volumes:
+      - ./docker-config/searxng:/etc/searxng:Z
+      - ./data/searxng:/var/cache/searxng:Z
+    image: searxng/searxng:latest
+    container_name: maim-bot-searxng
+    restart: unless-stopped
     networks:
       - maim_bot
 
