@@ -7,6 +7,7 @@ import json
 from json_repair import repair_json
 from sqlmodel import select
 
+from src.chat.message_receive.chat_manager import chat_manager
 from src.chat.message_receive.message import SessionMessage
 from src.common.database.database import get_db_session
 from src.common.database.database_model import Expression, ModifiedBy
@@ -82,7 +83,16 @@ class MaisakaExpressionSelector:
             if contains_current_session:
                 related_session_ids.update(group_session_ids)
 
+        if peer_session_id := self._resolve_implicit_inherited_session_id(session_id):
+            related_session_ids.add(peer_session_id)
+
         return related_session_ids, has_global_share
+
+    @staticmethod
+    def _resolve_implicit_inherited_session_id(session_id: str) -> Optional[str]:
+        """无法用 expression_groups 声明、但仍要纳入作用域的隐式继承（目前只有群临时会话 → 源群）。"""
+        chat_stream = chat_manager.get_session_by_session_id(session_id)
+        return chat_stream.compute_source_group_session_id() if chat_stream else None
 
     def _load_expression_candidates(self, session_id: str) -> List[dict[str, Any]]:
         related_session_ids, has_global_share = self._resolve_expression_group_scope(session_id)
