@@ -3122,6 +3122,15 @@ class DebugConfig(ConfigBase):
     )
     """是否折叠 Maisaka 的 prompt 展示入口"""
 
+    maisaka_plain_text_log: bool = Field(
+        default=True,
+        json_schema_extra={
+            "x-widget": "switch",
+            "x-icon": "align-left",
+        },
+    )
+    """是否使用纯文本输出 Maisaka 循环信息（关闭 Rich 面板边框）"""
+
     show_jargon_prompt: bool = Field(
         default=False,
         json_schema_extra={

@@ -45,7 +45,7 @@ from src.maisaka.context_messages import (
     ToolResultMessage,
     build_llm_message_from_context,
 )
-from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer
+from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer, PromptPreviewAccess
 from src.maisaka.message_adapter import parse_speaker_content
 from src.maisaka.planner_message_utils import extract_quote_ids_from_message_sequence
 from src.plugin_runtime.hook_payloads import serialize_prompt_messages
@@ -719,6 +719,7 @@ class BaseMaisakaReplyGenerator:
         show_replyer_reasoning = bool(getattr(global_config.debug, "show_replyer_reasoning", False))
         preview_chat_id = self._resolve_session_id(stream_id)
         replyer_prompt_section: RenderableType | None = None
+        replyer_prompt_preview_access: Optional[PromptPreviewAccess] = None
         retry_constraints: List[str] = []
         retry_reasons: List[str] = []
         retry_events: List[Dict[str, Any]] = []
@@ -956,15 +957,16 @@ class BaseMaisakaReplyGenerator:
             break
 
         if show_replyer_prompt:
+            replyer_prompt_preview_access = PromptCLIVisualizer.build_prompt_preview_access(
+                request_messages,
+                category="replyer",
+                chat_id=preview_chat_id,
+                request_kind="replyer",
+                selection_reason=f"ID: {preview_chat_id}",
+                output_content=response_text,
+            )
             replyer_prompt_section = Panel(
-                PromptCLIVisualizer.build_prompt_access_panel(
-                    request_messages,
-                    category="replyer",
-                    chat_id=preview_chat_id,
-                    request_kind="replyer",
-                    selection_reason=f"ID: {preview_chat_id}",
-                    output_content=response_text,
-                ),
+                replyer_prompt_preview_access.body,
                 title="Reply Prompt",
                 border_style="bright_yellow",
                 padding=(0, 1),
@@ -1045,6 +1047,7 @@ class BaseMaisakaReplyGenerator:
                 f"retry_count={retry_count} final={self._normalize_content(response_text, limit=300)!r}"
             )
         if show_replyer_prompt or show_replyer_reasoning:
+            use_plain_text = global_config.debug.maisaka_plain_text_log
             summary_lines = [
                 f"流ID: {preview_chat_id or 'unknown'}",
                 f"耗时: {result.metrics.overall_ms} ms",
@@ -1052,33 +1055,55 @@ class BaseMaisakaReplyGenerator:
             if result.selected_expression_ids:
                 summary_lines.append(f"表达编号: {result.selected_expression_ids!r}")
 
-            renderables: List[RenderableType] = [Text("\n".join(summary_lines))]
-            if replyer_prompt_section is not None:
-                renderables.append(replyer_prompt_section)
-            if show_replyer_reasoning and result.completion.reasoning_text:
+            if use_plain_text:
+                output_lines = [
+                    f"{'=' * 50}",
+                    f"  [MaiSaka 回复器]",
+                ]
+                output_lines.extend(f"  {line}" for line in summary_lines)
+                if show_replyer_prompt:
+                    output_lines.append(f"  {'-' * 40}")
+                    output_lines.append(f"  [Reply Prompt]")
+                    output_lines.append(f"    预览：{replyer_prompt_preview_access.viewer_path}")
+                    output_lines.append(f"    文本：{replyer_prompt_preview_access.dump_path}")
+                if show_replyer_reasoning and result.completion.reasoning_text:
+                    output_lines.append(f"  {'-' * 40}")
+                    output_lines.append(f"  [思考内容]")
+                    reasoning_preview = result.completion.reasoning_text.strip()
+                    output_lines.append(f"    {reasoning_preview[:300]}{'...' if len(reasoning_preview) > 300 else ''}")
+                output_lines.append(f"  {'-' * 40}")
+                output_lines.append(f"  [回复结果]")
+                output_lines.append(f"    {response_text}")
+                output_lines.append(f"{'=' * 50}")
+                console.print(Text("\n".join(output_lines)))
+            else:
+                renderables: List[RenderableType] = [Text("\n".join(summary_lines))]
+                if replyer_prompt_section is not None:
+                    renderables.append(replyer_prompt_section)
+                if show_replyer_reasoning and result.completion.reasoning_text:
+                    renderables.append(
+                        Panel(
+                            Text(result.completion.reasoning_text),
+                            title="思考内容",
+                            border_style="magenta",
+                            padding=(0, 1),
+                        )
+                    )
                 renderables.append(
                     Panel(
-                        Text(result.completion.reasoning_text),
-                        title="思考内容",
-                        border_style="magenta",
+                        Text(response_text),
+                        title="回复结果",
+                        border_style="green",
                         padding=(0, 1),
                     )
                 )
-            renderables.append(
-                Panel(
-                    Text(response_text),
-                    title="回复结果",
-                    border_style="green",
-                    padding=(0, 1),
+                console.print(
+                    Panel(
+                        Group(*renderables),
+                        title="MaiSaka 回复器",
+                        border_style="bright_yellow",
+                        padding=(0, 1),
+                    )
                 )
-            )
-            console.print(
-                Panel(
-                    Group(*renderables),
-                    title="MaiSaka 回复器",
-                    border_style="bright_yellow",
-                    padding=(0, 1),
-                )
-            )
         result.text_fragments = [response_text]
         return finalize(True)
