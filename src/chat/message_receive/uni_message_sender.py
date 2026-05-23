@@ -88,6 +88,12 @@ async def _send_message(message: SessionMessage, show_log: bool = True) -> bool:
             # 解析消息段，获取富文本内容
             message_segments = serialize_message_sequence(message.raw_message)
 
+            # 回填 reply 段缺失的原消息内容与发送者信息，
+            # 使实时广播与历史加载保持一致（避免前端显示"原消息内容不可用"）。
+            from src.webui.routers.chat.service import chat_history
+
+            chat_history._enrich_reply_segments(message_segments, {}, message.session_id)
+
             # 判断消息类型
             # 如果只有一个文本段，使用简单的 text 类型
             # 否则使用 rich 类型，包含完整的消息段
