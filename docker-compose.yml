@@ -83,18 +83,6 @@ services:
     networks:
       - maim_bot
 
-  searxng:
-    environment:
-      - TZ=${TZ:-Asia/Shanghai}
-    volumes:
-      - ./docker-config/searxng:/etc/searxng:Z
-      - ./data/searxng:/var/cache/searxng:Z
-    image: searxng/searxng:latest
-    container_name: maim-bot-searxng
-    restart: unless-stopped
-    networks:
-      - maim_bot
-
   # 启用 HTTPS 时，建议注释掉 core 服务中的 "18001:8001" 端口映射，
   # 然后取消注释此 Caddy 反向代理示例块，并按 dashboard/docs/Caddyfile.docker.example 修改域名。
   caddy:
