@@ -78,6 +78,7 @@ Language constraints:
 - {language_guard}
 - Preserve original names and domain terms exactly when possible.
 - JSON keys must stay exactly as: triples, entities, subject, predicate, object.
+- In dialogue or speech (where a speaker label precedes spoken content), extract triples from the meaning of what is said. The speaker is the information source, not the default subject of the extracted triple. Distinguish "who is speaking" from "who or what the content describes". When someone describes or evaluates another entity, the described target should appear as the subject or object, not the speaker.
 
 Text:
 {chunk.chunk.text}

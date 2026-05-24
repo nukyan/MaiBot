@@ -106,6 +106,7 @@ Language constraints:
 - {language_guard}
 - Preserve original names and terms exactly when possible.
 - JSON keys must stay exactly as: events, relations, subject, predicate, object.
+- In dialogue or speech (where a speaker label precedes spoken content), extract facts from the meaning of what is said. The speaker is the information source, not the default subject of the extracted relation. Distinguish "who is speaking" from "who or what the content describes". When someone describes or evaluates another, the described target should appear as the subject or object, not the speaker.
 
 Scene:
 {chunk.chunk.context.get('scene_id')}
