@@ -495,14 +495,16 @@ async def handle_tool(
                 success_message=_EMOJI_SUCCESS_MESSAGE,
             )
         structured_result["success"] = True
+        success_metadata = _build_send_emoji_monitor_metadata(
+            selection_metadata,
+            send_result=send_result,
+        )
+        success_metadata["pause_execution"] = True
         return tool_ctx.build_success_result(
             invocation.tool_name,
             selection_metadata["reason"] or _EMOJI_SUCCESS_MESSAGE,
             structured_content=structured_result,
-            metadata=_build_send_emoji_monitor_metadata(
-                selection_metadata,
-                send_result=send_result,
-            ),
+            metadata=success_metadata,
         )
 
     structured_result["description"] = send_result.description
