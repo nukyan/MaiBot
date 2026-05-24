@@ -1451,14 +1451,10 @@ class MaisakaHeartFlowChatting:
                 timing_prompt_tokens=timing_prompt_tokens,
                 timing_model_name=timing_model_name,
                 timing_response=timing_response,
-                timing_tool_calls=timing_tool_calls,
-                timing_tool_results=timing_tool_results,
                 timing_tool_detail_results=timing_tool_detail_results,
                 planner_prompt_tokens=planner_prompt_tokens,
                 planner_model_name=planner_model_name,
                 planner_response=planner_response,
-                planner_tool_calls=planner_tool_calls,
-                planner_tool_results=planner_tool_results,
                 planner_tool_detail_results=planner_tool_detail_results,
                 planner_extra_lines=planner_extra_lines,
             )
@@ -1538,24 +1534,18 @@ class MaisakaHeartFlowChatting:
         timing_prompt_tokens: Optional[int] = None,
         timing_model_name: Optional[str] = None,
         timing_response: str = "",
-        timing_tool_calls: Optional[list[Any]] = None,
-        timing_tool_results: Optional[list[str]] = None,
         timing_tool_detail_results: Optional[list[dict[str, Any]]] = None,
         planner_prompt_tokens: Optional[int] = None,
         planner_model_name: Optional[str] = None,
         planner_response: str = "",
-        planner_tool_calls: Optional[list[Any]] = None,
-        planner_tool_results: Optional[list[str]] = None,
         planner_tool_detail_results: Optional[list[dict[str, Any]]] = None,
         planner_extra_lines: Optional[list[str]] = None,
     ) -> None:
         """以纯文本格式输出 Maisaka 循环信息，不使用 Rich Panel 边框。"""
 
-        cycle_label = f"MaiSaka 循环 [{cycle_id}]"
-
         output_lines: list[str] = [
             f"{'=' * 60}",
-            f"  {cycle_label}",
+            f"  MaiSaka 循环 [{cycle_id}]",
             f"  聊天流名称：{self.session_name}",
             f"  聊天流ID：{self.session_id}",
         ]
@@ -1574,15 +1564,7 @@ class MaisakaHeartFlowChatting:
                 output_lines.append(f"    返回：{timing_resp}")
 
         # Timing Tool 阶段
-        timing_tool_lines = self._build_plain_text_tool_lines(
-            tool_calls=timing_tool_calls,
-            tool_results=timing_tool_results,
-            tool_detail_results=timing_tool_detail_results,
-        )
-        if timing_tool_lines:
-            output_lines.append(f"  {'-' * 40}")
-            output_lines.append(f"  [Timing Tool]")
-            output_lines.extend(f"    {line}" for line in timing_tool_lines)
+        self._append_plain_text_tool_lines(output_lines, "Timing Tool", timing_tool_detail_results)
 
         # Planner 阶段
         planner_model = (planner_model_name or "").strip()
@@ -1603,37 +1585,27 @@ class MaisakaHeartFlowChatting:
                 output_lines.append(f"    返回：{planner_resp}")
 
         # Planner Tool 阶段
-        planner_tool_lines = self._build_plain_text_tool_lines(
-            tool_calls=planner_tool_calls,
-            tool_results=planner_tool_results,
-            tool_detail_results=planner_tool_detail_results,
-        )
-        if planner_tool_lines:
-            output_lines.append(f"  {'-' * 40}")
-            output_lines.append(f"  [Planner Tool]")
-            output_lines.extend(f"    {line}" for line in planner_tool_lines)
+        self._append_plain_text_tool_lines(output_lines, "Planner Tool", planner_tool_detail_results)
 
-        # 流程耗时
-        time_records_text = self._build_cycle_time_records_text(time_records or {})
         output_lines.append(f"  {'-' * 40}")
-        output_lines.append(f"  {time_records_text}")
+        output_lines.append(f"  {self._build_cycle_time_records_text(time_records or {})}")
         output_lines.append(f"{'=' * 60}")
 
         console.print(Text("\n".join(output_lines)))
 
-    def _build_plain_text_tool_lines(
-        self,
-        *,
-        tool_calls: Optional[list[Any]] = None,
-        tool_results: Optional[list[str]] = None,
-        tool_detail_results: Optional[list[dict[str, Any]]] = None,
-    ) -> list[str]:
-        """将工具执行信息格式化为纯文本行。"""
+    @staticmethod
+    def _append_plain_text_tool_lines(
+        output_lines: list[str],
+        title: str,
+        tool_detail_results: Optional[list[dict[str, Any]]],
+    ) -> None:
+        """向输出行列表追加一个工具执行区块。"""
+
+        if not tool_detail_results:
+            return
 
         lines: list[str] = []
-        detail_results = tool_detail_results or []
-
-        for tool_result in detail_results:
+        for tool_result in tool_detail_results:
             tool_name = str(tool_result.get("tool_name") or "unknown").strip()
             tool_title = str(tool_result.get("tool_title") or "").strip() or tool_name
             summary = str(tool_result.get("summary") or "").strip()
@@ -1666,18 +1638,9 @@ class MaisakaHeartFlowChatting:
                 lines.append(f"  输出：{output_text[:200]}{'...' if len(output_text) > 200 else ''}")
 
         if lines:
-            return lines
-
-        # 兼容旧数据结构
-        if tool_results:
-            for result in tool_results:
-                stripped = result.strip()
-                if stripped:
-                    lines.append(stripped)
-        elif tool_calls:
-            lines.extend(build_tool_call_summary_lines(tool_calls))
-
-        return lines
+            output_lines.append(f"  {'-' * 40}")
+            output_lines.append(f"  [{title}]")
+            output_lines.extend(f"    {line}" for line in lines)
 
     def _build_cycle_stage_panel(
         self,
