@@ -180,5 +180,4 @@ async def handle_tool(
         invocation.tool_name,
         f"已发送上下文图片：{source_label}",
         structured_content=structured_content,
-        metadata={"pause_execution": True},
     )

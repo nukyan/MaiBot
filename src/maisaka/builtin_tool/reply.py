@@ -283,7 +283,6 @@ async def handle_tool(
     tool_ctx.runtime._record_reply_sent()
     reply_metadata["sent_message_ids"] = sent_message_ids
     reply_metadata["send_results"] = send_results
-    reply_metadata["pause_execution"] = True
     track_reply_effect = getattr(tool_ctx.runtime, "track_reply_effect", None)
     if track_reply_effect is not None:
         await track_reply_effect(
