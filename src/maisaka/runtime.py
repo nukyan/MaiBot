@@ -1479,6 +1479,22 @@ class MaisakaHeartFlowChatting:
         if not global_config.debug.show_maisaka_thinking:
             return
 
+        if global_config.debug.maisaka_plain_text_log:
+            self._render_context_usage_plain_text(
+                cycle_id=cycle_id,
+                time_records=time_records,
+                timing_prompt_tokens=timing_prompt_tokens,
+                timing_model_name=timing_model_name,
+                timing_response=timing_response,
+                timing_tool_detail_results=timing_tool_detail_results,
+                planner_prompt_tokens=planner_prompt_tokens,
+                planner_model_name=planner_model_name,
+                planner_response=planner_response,
+                planner_tool_detail_results=planner_tool_detail_results,
+                planner_extra_lines=planner_extra_lines,
+            )
+            return
+
         body_lines = [
             f"聊天流名称：{getattr(self, 'session_name', self.session_id)}",
             f"聊天流ID：{self.session_id}",
@@ -1545,6 +1561,122 @@ class MaisakaHeartFlowChatting:
                 padding=(0, 1),
             )
         )
+
+    def _render_context_usage_plain_text(
+        self,
+        *,
+        cycle_id: int,
+        time_records: Optional[dict[str, float]] = None,
+        timing_prompt_tokens: Optional[int] = None,
+        timing_model_name: Optional[str] = None,
+        timing_response: str = "",
+        timing_tool_detail_results: Optional[list[dict[str, Any]]] = None,
+        planner_prompt_tokens: Optional[int] = None,
+        planner_model_name: Optional[str] = None,
+        planner_response: str = "",
+        planner_tool_detail_results: Optional[list[dict[str, Any]]] = None,
+        planner_extra_lines: Optional[list[str]] = None,
+    ) -> None:
+        """以纯文本格式输出 Maisaka 循环信息，不使用 Rich Panel 边框。"""
+
+        output_lines: list[str] = [
+            f"{'=' * 60}",
+            f"  MaiSaka 循环 [{cycle_id}]",
+            f"  聊天流名称：{self.session_name}",
+            f"  聊天流ID：{self.session_id}",
+        ]
+
+        # Timing Gate 阶段
+        timing_model = (timing_model_name or "").strip()
+        timing_resp = timing_response.strip()
+        if timing_prompt_tokens is not None or timing_model or timing_resp:
+            output_lines.append(f"  {'-' * 40}")
+            output_lines.append(f"  [Timing Gate]")
+            if timing_model:
+                output_lines.append(f"    请求模型：{timing_model}")
+            if timing_prompt_tokens is not None:
+                output_lines.append(f"    Token消耗：{format_token_count(timing_prompt_tokens)}")
+            if timing_resp:
+                output_lines.append(f"    返回：{timing_resp}")
+
+        # Timing Tool 阶段
+        self._append_plain_text_tool_lines(output_lines, "Timing Tool", timing_tool_detail_results)
+
+        # Planner 阶段
+        planner_model = (planner_model_name or "").strip()
+        planner_resp = planner_response.strip()
+        if planner_prompt_tokens is not None or planner_model or planner_resp or planner_extra_lines:
+            output_lines.append(f"  {'-' * 40}")
+            output_lines.append(f"  [Planner]")
+            if planner_model:
+                output_lines.append(f"    请求模型：{planner_model}")
+            if planner_prompt_tokens is not None:
+                output_lines.append(f"    Token消耗：{format_token_count(planner_prompt_tokens)}")
+            if planner_extra_lines:
+                for extra_line in planner_extra_lines:
+                    stripped_line = extra_line.strip()
+                    if stripped_line:
+                        output_lines.append(f"    {stripped_line}")
+            if planner_resp:
+                output_lines.append(f"    返回：{planner_resp}")
+
+        # Planner Tool 阶段
+        self._append_plain_text_tool_lines(output_lines, "Planner Tool", planner_tool_detail_results)
+
+        output_lines.append(f"  {'-' * 40}")
+        output_lines.append(f"  {self._build_cycle_time_records_text(time_records or {})}")
+        output_lines.append(f"{'=' * 60}")
+
+        console.print(Text("\n".join(output_lines)))
+
+    @staticmethod
+    def _append_plain_text_tool_lines(
+        output_lines: list[str],
+        title: str,
+        tool_detail_results: Optional[list[dict[str, Any]]],
+    ) -> None:
+        """向输出行列表追加一个工具执行区块。"""
+
+        if not tool_detail_results:
+            return
+
+        lines: list[str] = []
+        for tool_result in tool_detail_results:
+            tool_name = str(tool_result.get("tool_name") or "unknown").strip()
+            tool_title = str(tool_result.get("tool_title") or "").strip() or tool_name
+            summary = str(tool_result.get("summary") or "").strip()
+            duration_ms = tool_result.get("duration_ms")
+            detail = tool_result.get("detail")
+            detail_dict = detail if isinstance(detail, dict) else {}
+
+            header = f"[{tool_title}]"
+            if summary:
+                header += f" {summary}"
+            if isinstance(duration_ms, (int, float)):
+                header += f" ({round(float(duration_ms), 2)} ms)"
+            lines.append(header)
+
+            metrics = detail_dict.get("metrics")
+            if isinstance(metrics, dict):
+                model_name = str(metrics.get("model_name") or "").strip()
+                if model_name:
+                    lines.append(f"  模型：{model_name}")
+                prompt_tokens = metrics.get("prompt_tokens")
+                if isinstance(prompt_tokens, int):
+                    lines.append(f"  Token：输入 {format_token_count(prompt_tokens)}")
+
+            reasoning_text = str(detail_dict.get("reasoning_text") or "").strip()
+            if reasoning_text:
+                lines.append(f"  思考：{reasoning_text[:200]}{'...' if len(reasoning_text) > 200 else ''}")
+
+            output_text = str(detail_dict.get("output_text") or "").strip()
+            if output_text:
+                lines.append(f"  输出：{output_text[:200]}{'...' if len(output_text) > 200 else ''}")
+
+        if lines:
+            output_lines.append(f"  {'-' * 40}")
+            output_lines.append(f"  [{title}]")
+            output_lines.extend(f"    {line}" for line in lines)
 
     def _build_cycle_stage_panel(
         self,
